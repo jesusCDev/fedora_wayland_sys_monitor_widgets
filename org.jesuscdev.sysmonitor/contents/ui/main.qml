@@ -16,6 +16,7 @@ PlasmoidItem {
     property real ramValue: 0.0
     property real ramUsedGB: 0.0
     property real batValue: -1.0    // -1 = no battery detected
+    property bool batCharging: false
 
     // CPU delta tracking
     property real prevCpuIdle: 0
@@ -33,6 +34,7 @@ PlasmoidItem {
     property bool showBat: Plasmoid.configuration.showBat
     property int updateIntervalSec: Plasmoid.configuration.updateIntervalSec
     property bool batOnRight: Plasmoid.configuration.batOnRight
+    property bool showChargingIcon: Plasmoid.configuration.showChargingIcon
 
     // Custom color overrides (empty string = use default)
     property string cpuColorOverride: Plasmoid.configuration.cpuColor
@@ -80,7 +82,7 @@ PlasmoidItem {
     // Build colored HTML for the panel
     function panelHtml() {
         var sep = '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
-        var spacer = '&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;'
+        var spacer = '&nbsp;&nbsp;&nbsp;<span style="color:#FFFFFF;">|</span>&nbsp;&nbsp;&nbsp;'
 
         // System metrics group
         var sys = []
@@ -93,8 +95,10 @@ PlasmoidItem {
 
         // Battery (separate with spacer)
         var bat = ''
-        if (showBat && batValue >= 0)
-            bat = '<b><span style="color:' + batHex + ';">BAT ' + fmt(batValue) + '%</span></b>'
+        if (showBat && batValue >= 0) {
+            var bolt = (showChargingIcon && batCharging) ? ' <span style="color:#FFFFFF;">&#x21AF;</span>' : ''
+            bat = '<b><span style="color:' + batHex + ';">BAT ' + fmt(batValue) + '%</span></b>' + bolt
+        }
 
         var sysStr = sys.join(sep)
 
@@ -165,7 +169,7 @@ PlasmoidItem {
             Text {
                 visible: root.showBat && root.batValue >= 0
                 textFormat: Text.RichText
-                text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%</b></span>'
+                text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%</b></span>' + ((root.showChargingIcon && root.batCharging) ? ' <span style="color:#FFFFFF; font-size:12pt;"><b>&#x21AF;</b></span>' : '')
             }
         }
     }
@@ -298,14 +302,18 @@ PlasmoidItem {
                 var output = (buffers[source] || "").trim()
                 delete buffers[source]
                 disconnectSource(source)
-                if (output !== "" && output !== "-1") {
-                    var val = parseFloat(output)
+                var parts = output.split("|")
+                var capStr = parts[0] || "-1"
+                var acStr = (parts[1] || "0").trim()
+                if (capStr !== "" && capStr !== "-1") {
+                    var val = parseFloat(capStr)
                     if (!isNaN(val)) {
                         batValue = val
                     }
                 } else {
                     batValue = -1
                 }
+                batCharging = (acStr === "1")
             }
         }
     }
@@ -323,7 +331,7 @@ PlasmoidItem {
         cpuSource.connectSource("head -1 /proc/stat")
         ramSource.connectSource("head -3 /proc/meminfo")
         gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
-        batSource.connectSource("sh -c 'cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1'")
+        batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); echo \"$cap|$ac\"'")
     }
 
     Component.onCompleted: {

@@ -16,6 +16,7 @@ Kirigami.FormLayout {
     property alias cfg_showBat: batCheck.checked
     property alias cfg_updateIntervalSec: intervalSpin.value
     property alias cfg_batOnRight: batRightCheck.checked
+    property alias cfg_showChargingIcon: chargingIconCheck.checked
     property alias cfg_cpuColor: cpuColorField.text
     property alias cfg_gpuColor: gpuColorField.text
     property alias cfg_ramColor: ramColorField.text
@@ -84,6 +85,12 @@ Kirigami.FormLayout {
         id: batRightCheck
         Kirigami.FormData.label: "Battery position:"
         text: "Move battery to right side"
+    }
+
+    CheckBox {
+        id: chargingIconCheck
+        Kirigami.FormData.label: "Charging icon:"
+        text: "Show lightning bolt when charging"
     }
 
     SpinBox {
