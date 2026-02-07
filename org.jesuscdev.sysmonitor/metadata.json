@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "jesuscdev"
+            }
+        ],
+        "Category": "System Monitor",
+        "Description": "Displays CPU, GPU, and RAM usage as colored text in the panel",
+        "Icon": "utilities-system-monitor",
+        "Id": "org.jesuscdev.sysmonitor",
+        "Name": "System Monitor Inline",
+        "Version": "1.0.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
