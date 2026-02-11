@@ -7,26 +7,24 @@ A minimal, color-coded system monitor widget for the KDE Plasma 6 panel. Display
 
 ## What It Looks Like
 
-```
-CPU 2%   GPU 8%   RAM 45%   NET 1.2M/s   BAT 80%
-```
+![System Monitor Inline screenshot](Screenshot_20260211_062436.png)
 
-Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple, **NET** in cyan, **BAT** in yellow. Colors turn **red** when configurable thresholds are hit.
+Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple, **NET** in cyan, **BAT** in yellow. Colors turn **red** when configurable thresholds are hit (or when network is disconnected).
 
 ## Features
 
 - **CPU usage** — reads from `/proc/stat` with delta calculation
 - **GPU usage** — queries KDE's KSystemStats via D-Bus (works with any driver: nouveau, i915, amdgpu, nvidia)
 - **RAM usage** — reads from `/proc/meminfo`, can display as percentage or GB
-- **Network speed** — live download rate with auto-scaling units (B/s, K/s, M/s, G/s)
+- **Network speed** — live download rate with auto-scaling units (K/s, M/s, G/s), turns red when disconnected
 - **Battery level** — reads from `/sys/class/power_supply/`, with optional time remaining and `│` separator
 - **Charge limit aware** — battery time-to-full respects `charge_control_end_threshold` (e.g. 80% charge protection)
 - **CPU/GPU temperature** — via hwmon sysfs sensors, displayed in °C (disabled by default)
 - **Disk usage** — root filesystem usage percentage (disabled by default)
 - **System uptime** — formatted as `3d 4h` or `2h 30m` (disabled by default)
 - **Trend arrows** — shows rising/falling indicators on metrics (disabled by default)
-- **Icon mode** — optional Font Awesome icons instead of text labels (disabled by default)
-- **Click to launch** — left-click opens a terminal command (default: `wezterm -e htop`), middle-click opens popup
+- **Icon mode** — optional Font Awesome icons instead of text labels, battery icon changes with charge level (disabled by default)
+- **Per-metric click actions** — left-click CPU/GPU/RAM/Disk opens a terminal command (default: `konsole -e htop`), Network opens WiFi settings, Battery/Uptime opens power settings. Middle-click opens popup
 - **1-second updates** by default (configurable 1–60s)
 - **Battery mode** — automatically reduces refresh rate when on battery power (default: 5s interval)
 - **Resource-aware** — only runs data collection for enabled metrics
@@ -64,7 +62,7 @@ Toggle each metric on/off: CPU, GPU, RAM, Network, Disk, Uptime, Battery, Batter
 | Update interval | Refresh rate from 1 to 60 seconds |
 | Battery mode | Reduce refresh rate when on battery power |
 | Battery mode interval | Refresh interval when on battery (1–60s, default 5) |
-| Click command | Command to run on left-click (default: `wezterm -e htop`) |
+| Click command | Command to run on left-click for CPU/GPU/RAM/Disk (default: `konsole -e htop`) |
 
 ### Colors
 Override color for any individual metric with text input or color picker. Leave empty for default.

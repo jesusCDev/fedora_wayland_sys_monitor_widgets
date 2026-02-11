@@ -38,6 +38,7 @@ PlasmoidItem {
     // Network delta tracking
     property real prevNetRxBytes: 0
     property bool netFirstRun: true
+    property bool netConnected: true
 
     // Trend arrow tracking
     property real prevCpuDisplay: 0.0
@@ -124,8 +125,8 @@ PlasmoidItem {
         ? warnHex : (ramColorOverride !== "" ? ramColorOverride : (brightColors ? ramHexBright : ramHexNormal))
     property string batHex: (warnEnabled && batValue >= 0 && batValue <= batWarnThreshold)
         ? warnHex : (batColorOverride !== "" ? batColorOverride : (brightColors ? batHexBright : batHexNormal))
-    property string netHex: netColorOverride !== ""
-        ? netColorOverride : (brightColors ? netHexBright : netHexNormal)
+    property string netHex: !netConnected
+        ? warnHex : (netColorOverride !== "" ? netColorOverride : (brightColors ? netHexBright : netHexNormal))
     property string diskHex: (warnEnabled && diskValue >= 90)
         ? warnHex : (diskColorOverride !== "" ? diskColorOverride : (brightColors ? diskHexBright : diskHexNormal))
     property string uptimeHex: uptimeColorOverride !== ""
@@ -155,8 +156,7 @@ PlasmoidItem {
     function fmtNetSpeed(bytesPerSec) {
         if (bytesPerSec >= 1073741824) return (bytesPerSec / 1073741824).toFixed(1) + 'G/s'
         if (bytesPerSec >= 1048576) return (bytesPerSec / 1048576).toFixed(1) + 'M/s'
-        if (bytesPerSec >= 1024) return (bytesPerSec / 1024).toFixed(0) + 'K/s'
-        return Math.round(bytesPerSec) + 'B/s'
+        return (bytesPerSec / 1024).toFixed(0) + 'K/s'
     }
 
     function fmtUptime(secs) {
@@ -193,6 +193,17 @@ PlasmoidItem {
         return ''
     }
 
+    // Battery icon based on percentage (scales with charge limit)
+    function batIconUnicode() {
+        // Scale percentage relative to charge limit so e.g. 80% with 80% limit = full
+        var pct = batChargeLimit < 100 ? (batValue / batChargeLimit) * 100 : batValue
+        if (pct >= 80) return 'f240'       // battery-full
+        if (pct >= 55) return 'f241'       // battery-three-quarters
+        if (pct >= 30) return 'f242'       // battery-half
+        if (pct >= 10) return 'f243'       // battery-quarter
+        return 'f244'                       // battery-empty
+    }
+
     // ── Click action helpers ────────────────────────────────────
     function launchApp(cmd) {
         if (cmd !== "")
@@ -221,7 +232,7 @@ PlasmoidItem {
                 bolt = ' <span style="color:#FFFFFF;">&#x26A1;</span>'
         }
         var batTimeStr = showBatTime ? (' ' + fmtBatTime()) : ''
-        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', 'f240', batHex) + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
+        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', batIconUnicode(), batHex) + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
     }
 
     function batSepHtml() {
@@ -340,7 +351,8 @@ PlasmoidItem {
                     font.pointSize: 10
                     verticalAlignment: Text.AlignVCenter
                     text: '<b><span style="color:' + root.netHex + ';">'
-                        + root.metricLabel('NET', 'f019', root.netHex) + root.fmtNetSpeed(root.netDownBytes) + '</span></b>'
+                        + root.metricLabel('NET', root.netConnected ? 'f019' : 'f071', root.netHex)
+                        + (root.netConnected ? root.fmtNetSpeed(root.netDownBytes) : 'OFF') + '</span></b>'
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
@@ -448,7 +460,8 @@ PlasmoidItem {
             Text {
                 visible: root.showNet
                 textFormat: Text.RichText
-                text: '<span style="color:' + root.netHex + '; font-size:12pt;"><b>NET:  ' + root.fmtNetSpeed(root.netDownBytes) + '</b></span>'
+                text: '<span style="color:' + root.netHex + '; font-size:12pt;"><b>NET:  '
+                    + (root.netConnected ? root.fmtNetSpeed(root.netDownBytes) : 'Disconnected') + '</b></span>'
             }
             Text {
                 visible: root.showDisk
@@ -649,7 +662,9 @@ PlasmoidItem {
     }
 
     function parseNetData(output) {
-        var totalRx = parseFloat(output) || 0
+        var parts = output.split("|")
+        var totalRx = parseFloat(parts[0]) || 0
+        netConnected = (parts[1] || "0").trim() === "1"
         if (!netFirstRun) {
             var delta = totalRx - prevNetRxBytes
             if (delta >= 0) {
@@ -763,7 +778,7 @@ PlasmoidItem {
         }
 
         if (showNet) {
-            netSource.connectSource("sh -c 'awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); sum+=\\$2} END{print sum+0}\" /proc/net/dev'")
+            netSource.connectSource("sh -c 'rx=$(awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); sum+=\\$2} END{print sum+0}\" /proc/net/dev); up=0; for iface in /sys/class/net/*; do n=$(basename $iface); [ \"$n\" != \"lo\" ] && s=$(cat $iface/operstate 2>/dev/null); [ \"$s\" = \"up\" ] && up=1; done; echo \"$rx|$up\"'")
         }
 
         if (showDisk) {
