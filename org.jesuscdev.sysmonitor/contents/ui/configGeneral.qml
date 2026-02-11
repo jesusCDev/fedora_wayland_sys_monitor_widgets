@@ -14,15 +14,30 @@ Kirigami.FormLayout {
     property alias cfg_showGpu: gpuCheck.checked
     property alias cfg_showRam: ramCheck.checked
     property alias cfg_showBat: batCheck.checked
+    property alias cfg_showNet: netCheck.checked
+    property alias cfg_showCpuTemp: cpuTempCheck.checked
+    property alias cfg_showGpuTemp: gpuTempCheck.checked
+    property alias cfg_showDisk: diskCheck.checked
+    property alias cfg_showUptime: uptimeCheck.checked
+    property alias cfg_showBatTime: batTimeCheck.checked
+    property alias cfg_showTrendArrows: trendCheck.checked
     property alias cfg_updateIntervalSec: intervalSpin.value
     property alias cfg_batOnRight: batRightCheck.checked
     property alias cfg_showChargingIcon: chargingIconCheck.checked
     property alias cfg_itemSpacing: spacingSpin.value
     property alias cfg_showBatSpacer: batSpacerCheck.checked
+    property alias cfg_clickCommand: clickCommandField.text
+    property alias cfg_cpuWarnThreshold: cpuWarnSpin.value
+    property alias cfg_gpuWarnThreshold: gpuWarnSpin.value
+    property alias cfg_ramWarnThreshold: ramWarnSpin.value
+    property alias cfg_batWarnThreshold: batWarnSpin.value
     property alias cfg_cpuColor: cpuColorField.text
     property alias cfg_gpuColor: gpuColorField.text
     property alias cfg_ramColor: ramColorField.text
     property alias cfg_batColor: batColorField.text
+    property alias cfg_netColor: netColorField.text
+    property alias cfg_diskColor: diskColorField.text
+    property alias cfg_uptimeColor: uptimeColorField.text
     property alias cfg_warnColor: warnColorField.text
 
     Kirigami.Separator {
@@ -37,9 +52,21 @@ Kirigami.FormLayout {
     }
 
     CheckBox {
+        id: cpuTempCheck
+        Kirigami.FormData.label: "CPU temp:"
+        text: "Show CPU temperature"
+    }
+
+    CheckBox {
         id: gpuCheck
         Kirigami.FormData.label: "GPU:"
         text: "Show GPU usage"
+    }
+
+    CheckBox {
+        id: gpuTempCheck
+        Kirigami.FormData.label: "GPU temp:"
+        text: "Show GPU temperature"
     }
 
     CheckBox {
@@ -49,9 +76,33 @@ Kirigami.FormLayout {
     }
 
     CheckBox {
+        id: netCheck
+        Kirigami.FormData.label: "Network:"
+        text: "Show network download speed"
+    }
+
+    CheckBox {
+        id: diskCheck
+        Kirigami.FormData.label: "Disk:"
+        text: "Show disk usage"
+    }
+
+    CheckBox {
+        id: uptimeCheck
+        Kirigami.FormData.label: "Uptime:"
+        text: "Show system uptime"
+    }
+
+    CheckBox {
         id: batCheck
         Kirigami.FormData.label: "Battery:"
         text: "Show battery level"
+    }
+
+    CheckBox {
+        id: batTimeCheck
+        Kirigami.FormData.label: "Battery time:"
+        text: "Show estimated time remaining"
     }
 
     Kirigami.Separator {
@@ -80,7 +131,13 @@ Kirigami.FormLayout {
     CheckBox {
         id: warnCheck
         Kirigami.FormData.label: "Warnings:"
-        text: "Red at 90% usage (CPU/GPU/RAM) and 15% battery"
+        text: "Color change at warning thresholds"
+    }
+
+    CheckBox {
+        id: trendCheck
+        Kirigami.FormData.label: "Trend arrows:"
+        text: "Show arrows when values rise or fall"
     }
 
     CheckBox {
@@ -95,6 +152,12 @@ Kirigami.FormLayout {
         text: "Show lightning bolt when charging"
     }
 
+    CheckBox {
+        id: batSpacerCheck
+        Kirigami.FormData.label: "Battery separator:"
+        text: "Show | divider between battery and other items"
+    }
+
     SpinBox {
         id: spacingSpin
         Kirigami.FormData.label: "Item spacing:"
@@ -103,18 +166,55 @@ Kirigami.FormLayout {
         stepSize: 1
     }
 
-    CheckBox {
-        id: batSpacerCheck
-        Kirigami.FormData.label: "Battery separator:"
-        text: "Show | divider between battery and other items"
-    }
-
     SpinBox {
         id: intervalSpin
         Kirigami.FormData.label: "Update interval (seconds):"
         from: 1
         to: 60
         stepSize: 1
+    }
+
+    TextField {
+        id: clickCommandField
+        Kirigami.FormData.label: "Click command:"
+        placeholderText: "wezterm -e htop"
+    }
+
+    Kirigami.Separator {
+        Kirigami.FormData.isSection: true
+        Kirigami.FormData.label: "Warning Thresholds"
+    }
+
+    SpinBox {
+        id: cpuWarnSpin
+        Kirigami.FormData.label: "CPU warning (%):"
+        from: 0
+        to: 100
+        stepSize: 5
+    }
+
+    SpinBox {
+        id: gpuWarnSpin
+        Kirigami.FormData.label: "GPU warning (%):"
+        from: 0
+        to: 100
+        stepSize: 5
+    }
+
+    SpinBox {
+        id: ramWarnSpin
+        Kirigami.FormData.label: "RAM warning (%):"
+        from: 0
+        to: 100
+        stepSize: 5
+    }
+
+    SpinBox {
+        id: batWarnSpin
+        Kirigami.FormData.label: "Battery warning (%):"
+        from: 0
+        to: 100
+        stepSize: 5
     }
 
     Kirigami.Separator {
@@ -138,6 +238,24 @@ Kirigami.FormLayout {
         id: ramColorField
         Kirigami.FormData.label: "RAM color:"
         placeholderText: "#EA80FC"
+    }
+
+    TextField {
+        id: netColorField
+        Kirigami.FormData.label: "Network color:"
+        placeholderText: "#80DEEA"
+    }
+
+    TextField {
+        id: diskColorField
+        Kirigami.FormData.label: "Disk color:"
+        placeholderText: "#FFB74D"
+    }
+
+    TextField {
+        id: uptimeColorField
+        Kirigami.FormData.label: "Uptime color:"
+        placeholderText: "#ECEFF1"
     }
 
     TextField {

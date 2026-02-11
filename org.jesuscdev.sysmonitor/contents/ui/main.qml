@@ -17,11 +17,28 @@ PlasmoidItem {
     property real ramUsedGB: 0.0
     property real batValue: -1.0    // -1 = no battery detected
     property bool batCharging: false
+    property real cpuTemp: 0.0
+    property real gpuTemp: 0.0
+    property real netDownBytes: 0.0  // bytes/sec download rate
+    property real diskValue: 0.0
+    property real uptimeSecs: 0.0
+    property real batEnergyNow: 0.0
+    property real batEnergyFull: 0.0
+    property real batPowerNow: 0.0
 
     // CPU delta tracking
     property real prevCpuIdle: 0
     property real prevCpuTotal: 0
     property bool cpuFirstRun: true
+
+    // Network delta tracking
+    property real prevNetRxBytes: 0
+    property bool netFirstRun: true
+
+    // Trend arrow tracking
+    property real prevCpuDisplay: 0.0
+    property real prevGpuDisplay: 0.0
+    property real prevRamDisplay: 0.0
 
     // Settings (persisted via Plasmoid.configuration)
     property bool useDecimals: Plasmoid.configuration.useDecimals
@@ -32,17 +49,34 @@ PlasmoidItem {
     property bool showGpu: Plasmoid.configuration.showGpu
     property bool showRam: Plasmoid.configuration.showRam
     property bool showBat: Plasmoid.configuration.showBat
+    property bool showNet: Plasmoid.configuration.showNet
+    property bool showCpuTemp: Plasmoid.configuration.showCpuTemp
+    property bool showGpuTemp: Plasmoid.configuration.showGpuTemp
+    property bool showDisk: Plasmoid.configuration.showDisk
+    property bool showTrendArrows: Plasmoid.configuration.showTrendArrows
+    property bool showBatTime: Plasmoid.configuration.showBatTime
+    property bool showUptime: Plasmoid.configuration.showUptime
     property int updateIntervalSec: Plasmoid.configuration.updateIntervalSec
     property bool batOnRight: Plasmoid.configuration.batOnRight
     property bool showChargingIcon: Plasmoid.configuration.showChargingIcon
     property int itemSpacing: Plasmoid.configuration.itemSpacing
     property bool showBatSpacer: Plasmoid.configuration.showBatSpacer
+    property string clickCommand: Plasmoid.configuration.clickCommand
+
+    // Warning thresholds
+    property int cpuWarnThreshold: Plasmoid.configuration.cpuWarnThreshold
+    property int gpuWarnThreshold: Plasmoid.configuration.gpuWarnThreshold
+    property int ramWarnThreshold: Plasmoid.configuration.ramWarnThreshold
+    property int batWarnThreshold: Plasmoid.configuration.batWarnThreshold
 
     // Custom color overrides (empty string = use default)
     property string cpuColorOverride: Plasmoid.configuration.cpuColor
     property string gpuColorOverride: Plasmoid.configuration.gpuColor
     property string ramColorOverride: Plasmoid.configuration.ramColor
     property string batColorOverride: Plasmoid.configuration.batColor
+    property string netColorOverride: Plasmoid.configuration.netColor
+    property string diskColorOverride: Plasmoid.configuration.diskColor
+    property string uptimeColorOverride: Plasmoid.configuration.uptimeColor
     property string warnColorOverride: Plasmoid.configuration.warnColor
 
     // ── Color definitions ───────────────────────────────────────
@@ -50,11 +84,17 @@ PlasmoidItem {
     readonly property string gpuHexNormal: "#66BB6A"    // green
     readonly property string ramHexNormal: "#AB47BC"    // purple
     readonly property string batHexNormal: "#FDD835"    // yellow
+    readonly property string netHexNormal: "#4DD0E1"    // cyan
+    readonly property string diskHexNormal: "#FFA726"   // orange
+    readonly property string uptimeHexNormal: "#B0BEC5" // light gray
 
     readonly property string cpuHexBright: "#80D8FF"
     readonly property string gpuHexBright: "#69F0AE"
     readonly property string ramHexBright: "#EA80FC"
     readonly property string batHexBright: "#FFEE58"
+    readonly property string netHexBright: "#80DEEA"
+    readonly property string diskHexBright: "#FFB74D"
+    readonly property string uptimeHexBright: "#ECEFF1"
 
     readonly property string warnHexNormal: "#EF5350"
     readonly property string warnHexBright: "#FF5252"
@@ -62,14 +102,20 @@ PlasmoidItem {
         ? warnColorOverride : (brightColors ? warnHexBright : warnHexNormal)
 
     // Resolved colors (accounting for warnings, then overrides, then bright/normal)
-    property string cpuHex: (warnEnabled && cpuValue >= 90)
+    property string cpuHex: (warnEnabled && cpuValue >= cpuWarnThreshold)
         ? warnHex : (cpuColorOverride !== "" ? cpuColorOverride : (brightColors ? cpuHexBright : cpuHexNormal))
-    property string gpuHex: (warnEnabled && gpuValue >= 90)
+    property string gpuHex: (warnEnabled && gpuValue >= gpuWarnThreshold)
         ? warnHex : (gpuColorOverride !== "" ? gpuColorOverride : (brightColors ? gpuHexBright : gpuHexNormal))
-    property string ramHex: (warnEnabled && ramValue >= 90)
+    property string ramHex: (warnEnabled && ramValue >= ramWarnThreshold)
         ? warnHex : (ramColorOverride !== "" ? ramColorOverride : (brightColors ? ramHexBright : ramHexNormal))
-    property string batHex: (warnEnabled && batValue >= 0 && batValue <= 15)
+    property string batHex: (warnEnabled && batValue >= 0 && batValue <= batWarnThreshold)
         ? warnHex : (batColorOverride !== "" ? batColorOverride : (brightColors ? batHexBright : batHexNormal))
+    property string netHex: netColorOverride !== ""
+        ? netColorOverride : (brightColors ? netHexBright : netHexNormal)
+    property string diskHex: (warnEnabled && diskValue >= 90)
+        ? warnHex : (diskColorOverride !== "" ? diskColorOverride : (brightColors ? diskHexBright : diskHexNormal))
+    property string uptimeHex: uptimeColorOverride !== ""
+        ? uptimeColorOverride : (brightColors ? uptimeHexBright : uptimeHexNormal)
 
     // Format helpers
     function fmt(val) {
@@ -79,6 +125,44 @@ PlasmoidItem {
     function fmtRam() {
         if (ramShowGB) return ramUsedGB.toFixed(1) + 'GB'
         return fmt(ramValue) + '%'
+    }
+
+    function fmtNetSpeed(bytesPerSec) {
+        if (bytesPerSec >= 1073741824) return (bytesPerSec / 1073741824).toFixed(1) + 'G/s'
+        if (bytesPerSec >= 1048576) return (bytesPerSec / 1048576).toFixed(1) + 'M/s'
+        if (bytesPerSec >= 1024) return (bytesPerSec / 1024).toFixed(0) + 'K/s'
+        return Math.round(bytesPerSec) + 'B/s'
+    }
+
+    function fmtUptime(secs) {
+        var d = Math.floor(secs / 86400)
+        var h = Math.floor((secs % 86400) / 3600)
+        var m = Math.floor((secs % 3600) / 60)
+        if (d > 0) return d + 'd ' + h + 'h'
+        if (h > 0) return h + 'h ' + m + 'm'
+        return m + 'm'
+    }
+
+    function fmtBatTime() {
+        if (batPowerNow <= 0) return ''
+        var hours = 0
+        if (batCharging)
+            hours = (batEnergyFull - batEnergyNow) / batPowerNow
+        else
+            hours = batEnergyNow / batPowerNow
+        if (hours < 0 || hours > 99) return ''
+        var h = Math.floor(hours)
+        var m = Math.round((hours - h) * 60)
+        if (h > 0) return h + 'h' + (m > 0 ? m + 'm' : '')
+        return m + 'm'
+    }
+
+    function trendArrow(current, previous) {
+        if (!showTrendArrows) return ''
+        var delta = current - previous
+        if (delta > 2) return ' &#x2191;'   // ↑
+        if (delta < -2) return ' &#x2193;'  // ↓
+        return ''
     }
 
     // Build colored HTML for the panel
@@ -95,18 +179,39 @@ PlasmoidItem {
 
         // System metrics group
         var sys = []
-        if (showCpu)
-            sys.push('<b><span style="color:' + cpuHex + ';">CPU ' + fmt(cpuValue) + '%</span></b>')
-        if (showGpu)
-            sys.push('<b><span style="color:' + gpuHex + ';">GPU ' + fmt(gpuValue) + '%</span></b>')
-        if (showRam)
-            sys.push('<b><span style="color:' + ramHex + ';">RAM ' + fmtRam() + '</span></b>')
+        if (showCpu) {
+            var cpuStr = 'CPU ' + fmt(cpuValue) + '%'
+            if (showCpuTemp) cpuStr += ' ' + Math.round(cpuTemp) + '°'
+            cpuStr += trendArrow(cpuValue, prevCpuDisplay)
+            sys.push('<b><span style="color:' + cpuHex + ';">' + cpuStr + '</span></b>')
+        }
+        if (showGpu) {
+            var gpuStr = 'GPU ' + fmt(gpuValue) + '%'
+            if (showGpuTemp) gpuStr += ' ' + Math.round(gpuTemp) + '°'
+            gpuStr += trendArrow(gpuValue, prevGpuDisplay)
+            sys.push('<b><span style="color:' + gpuHex + ';">' + gpuStr + '</span></b>')
+        }
+        if (showRam) {
+            var ramStr = 'RAM ' + fmtRam()
+            ramStr += trendArrow(ramValue, prevRamDisplay)
+            sys.push('<b><span style="color:' + ramHex + ';">' + ramStr + '</span></b>')
+        }
+        if (showNet) {
+            sys.push('<b><span style="color:' + netHex + ';">NET ' + fmtNetSpeed(netDownBytes) + '</span></b>')
+        }
+        if (showDisk) {
+            sys.push('<b><span style="color:' + diskHex + ';">DISK ' + fmt(diskValue) + '%</span></b>')
+        }
+        if (showUptime) {
+            sys.push('<b><span style="color:' + uptimeHex + ';">UP ' + fmtUptime(uptimeSecs) + '</span></b>')
+        }
 
         // Battery
         var bat = ''
         if (showBat && batValue >= 0) {
             var bolt = (showChargingIcon && batCharging) ? ' <span style="color:#FFFFFF;">&#x21AF;</span>' : ''
-            bat = '<b><span style="color:' + batHex + ';">BAT ' + fmt(batValue) + '%</span></b>' + bolt
+            var batTimeStr = showBatTime ? (' ' + fmtBatTime()) : ''
+            bat = '<b><span style="color:' + batHex + ';">BAT ' + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
         }
 
         var sysStr = sys.join(sep)
@@ -137,7 +242,18 @@ PlasmoidItem {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: root.expanded = !root.expanded
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.LeftButton) {
+                    if (root.clickCommand !== "") {
+                        launchSource.connectSource(root.clickCommand)
+                    } else {
+                        root.expanded = !root.expanded
+                    }
+                } else if (mouse.button === Qt.MiddleButton) {
+                    root.expanded = !root.expanded
+                }
+            }
         }
     }
 
@@ -163,12 +279,14 @@ PlasmoidItem {
             Text {
                 visible: root.showCpu
                 textFormat: Text.RichText
-                text: '<span style="color:' + root.cpuHex + '; font-size:12pt;"><b>CPU:  ' + root.fmt(root.cpuValue) + '%</b></span>'
+                text: '<span style="color:' + root.cpuHex + '; font-size:12pt;"><b>CPU:  ' + root.fmt(root.cpuValue) + '%'
+                    + (root.showCpuTemp ? '  ' + Math.round(root.cpuTemp) + '°C' : '') + '</b></span>'
             }
             Text {
                 visible: root.showGpu
                 textFormat: Text.RichText
-                text: '<span style="color:' + root.gpuHex + '; font-size:12pt;"><b>GPU:  ' + root.fmt(root.gpuValue) + '%</b></span>'
+                text: '<span style="color:' + root.gpuHex + '; font-size:12pt;"><b>GPU:  ' + root.fmt(root.gpuValue) + '%'
+                    + (root.showGpuTemp ? '  ' + Math.round(root.gpuTemp) + '°C' : '') + '</b></span>'
             }
             Text {
                 visible: root.showRam
@@ -176,9 +294,38 @@ PlasmoidItem {
                 text: '<span style="color:' + root.ramHex + '; font-size:12pt;"><b>RAM:  ' + root.fmtRam() + '</b></span>'
             }
             Text {
+                visible: root.showNet
+                textFormat: Text.RichText
+                text: '<span style="color:' + root.netHex + '; font-size:12pt;"><b>NET:  ' + root.fmtNetSpeed(root.netDownBytes) + '</b></span>'
+            }
+            Text {
+                visible: root.showDisk
+                textFormat: Text.RichText
+                text: '<span style="color:' + root.diskHex + '; font-size:12pt;"><b>DISK:  ' + root.fmt(root.diskValue) + '%</b></span>'
+            }
+            Text {
+                visible: root.showUptime
+                textFormat: Text.RichText
+                text: '<span style="color:' + root.uptimeHex + '; font-size:12pt;"><b>UP:  ' + root.fmtUptime(root.uptimeSecs) + '</b></span>'
+            }
+            Text {
                 visible: root.showBat && root.batValue >= 0
                 textFormat: Text.RichText
-                text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%</b></span>' + ((root.showChargingIcon && root.batCharging) ? ' <span style="color:#FFFFFF; font-size:12pt;"><b>&#x21AF;</b></span>' : '')
+                text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%'
+                    + (root.showBatTime ? '  ' + root.fmtBatTime() : '') + '</b></span>'
+                    + ((root.showChargingIcon && root.batCharging) ? ' <span style="color:#FFFFFF; font-size:12pt;"><b>&#x21AF;</b></span>' : '')
+            }
+        }
+    }
+
+    // ── Launch command data source ────────────────────────────────
+    PlasmaSupport.DataSource {
+        id: launchSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(source, data) {
+            if (data["exit code"] !== undefined) {
+                disconnectSource(source)
             }
         }
     }
@@ -221,6 +368,7 @@ PlasmoidItem {
             var diffIdle = totalIdle - prevCpuIdle
             var diffTotal = total - prevCpuTotal
             if (diffTotal > 0) {
+                prevCpuDisplay = cpuValue
                 cpuValue = 100.0 * (1.0 - diffIdle / diffTotal)
             }
         }
@@ -259,6 +407,7 @@ PlasmoidItem {
         }
         if (memTotal > 0) {
             var used = memTotal - memAvailable
+            prevRamDisplay = ramValue
             ramValue = 100.0 * used / memTotal
             ramUsedGB = used / 1024.0 / 1024.0
         }
@@ -280,6 +429,7 @@ PlasmoidItem {
                 if (output !== "") {
                     var val = parseFloat(output)
                     if (!isNaN(val)) {
+                        prevGpuDisplay = gpuValue
                         gpuValue = val
                     }
                 }
@@ -294,6 +444,106 @@ PlasmoidItem {
         onNewData: function(source, data) {
             if (data["exit code"] !== undefined) {
                 disconnectSource(source)
+            }
+        }
+    }
+
+    // ── Temperature data source ──────────────────────────────────
+    PlasmaSupport.DataSource {
+        id: tempSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "").trim()
+                delete buffers[source]
+                disconnectSource(source)
+                parseTempData(output)
+            }
+        }
+    }
+
+    function parseTempData(output) {
+        // Output format: "cpuTemp gpuTemp" (two values separated by space)
+        var parts = output.split(/\s+/)
+        if (parts.length >= 1) {
+            var ct = parseFloat(parts[0])
+            if (!isNaN(ct)) cpuTemp = ct
+        }
+        if (parts.length >= 2) {
+            var gt = parseFloat(parts[1])
+            if (!isNaN(gt)) gpuTemp = gt
+        }
+    }
+
+    // ── Network data source ──────────────────────────────────────
+    PlasmaSupport.DataSource {
+        id: netSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "").trim()
+                delete buffers[source]
+                disconnectSource(source)
+                parseNetData(output)
+            }
+        }
+    }
+
+    function parseNetData(output) {
+        // Output is total RX bytes across all non-lo interfaces
+        var totalRx = parseFloat(output) || 0
+        if (!netFirstRun) {
+            var delta = totalRx - prevNetRxBytes
+            if (delta >= 0) {
+                netDownBytes = delta / updateIntervalSec
+            }
+        }
+        netFirstRun = false
+        prevNetRxBytes = totalRx
+    }
+
+    // ── Disk data source ─────────────────────────────────────────
+    PlasmaSupport.DataSource {
+        id: diskSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "").trim()
+                delete buffers[source]
+                disconnectSource(source)
+                var val = parseInt(output) || 0
+                diskValue = val
+            }
+        }
+    }
+
+    // ── Uptime data source ───────────────────────────────────────
+    PlasmaSupport.DataSource {
+        id: uptimeSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "").trim()
+                delete buffers[source]
+                disconnectSource(source)
+                var val = parseFloat(output) || 0
+                uptimeSecs = val
             }
         }
     }
@@ -314,6 +564,9 @@ PlasmoidItem {
                 var parts = output.split("|")
                 var capStr = parts[0] || "-1"
                 var acStr = (parts[1] || "0").trim()
+                var enNow = (parts[2] || "0").trim()
+                var enFull = (parts[3] || "0").trim()
+                var pwNow = (parts[4] || "0").trim()
                 if (capStr !== "" && capStr !== "-1") {
                     var val = parseFloat(capStr)
                     if (!isNaN(val)) {
@@ -323,6 +576,9 @@ PlasmoidItem {
                     batValue = -1
                 }
                 batCharging = (acStr === "1")
+                batEnergyNow = (parseFloat(enNow) || 0) / 1000000.0
+                batEnergyFull = (parseFloat(enFull) || 0) / 1000000.0
+                batPowerNow = (parseFloat(pwNow) || 0) / 1000000.0
             }
         }
     }
@@ -340,11 +596,29 @@ PlasmoidItem {
         cpuSource.connectSource("head -1 /proc/stat")
         ramSource.connectSource("head -3 /proc/meminfo")
         gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
-        batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); echo \"$cap|$ac\"'")
+        batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); echo \"$cap|$ac|$en|$ef|$pw\"'")
+
+        if (showCpuTemp || showGpuTemp) {
+            tempSource.connectSource("sh -c 'ct=$(busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 cpu/cpu0/temperature 2>/dev/null | awk \"{print \\$NF}\"); gt=$(busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/temperature 2>/dev/null | awk \"{print \\$NF}\"); echo \"${ct:-0} ${gt:-0}\"'")
+        }
+
+        if (showNet) {
+            netSource.connectSource("sh -c 'awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); sum+=\\$2} END{print sum+0}\" /proc/net/dev'")
+        }
+
+        if (showDisk) {
+            diskSource.connectSource("sh -c \"df / --output=pcent | tail -1 | tr -d ' %'\"")
+        }
+
+        if (showUptime) {
+            uptimeSource.connectSource("sh -c \"awk '{print \\$1}' /proc/uptime\"")
+        }
     }
 
     Component.onCompleted: {
         gpuSubscribe.connectSource("busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/usage")
+        gpuSubscribe.connectSource("busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 cpu/cpu0/temperature")
+        gpuSubscribe.connectSource("busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/temperature")
         refreshAll()
     }
 }

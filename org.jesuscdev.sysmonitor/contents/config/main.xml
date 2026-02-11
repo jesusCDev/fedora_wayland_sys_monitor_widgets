@@ -48,6 +48,50 @@
         <entry name="showBatSpacer" type="Bool">
             <default>false</default>
         </entry>
+        <entry name="clickCommand" type="String">
+            <default>wezterm -e htop</default>
+        </entry>
+        <entry name="showNet" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="showCpuTemp" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showGpuTemp" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showDisk" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showTrendArrows" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showBatTime" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showUptime" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="cpuWarnThreshold" type="Int">
+            <default>90</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
+        <entry name="gpuWarnThreshold" type="Int">
+            <default>90</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
+        <entry name="ramWarnThreshold" type="Int">
+            <default>90</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
+        <entry name="batWarnThreshold" type="Int">
+            <default>15</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
         <entry name="cpuColor" type="String">
             <default></default>
         </entry>
@@ -58,6 +102,15 @@
             <default></default>
         </entry>
         <entry name="batColor" type="String">
+            <default></default>
+        </entry>
+        <entry name="netColor" type="String">
+            <default></default>
+        </entry>
+        <entry name="diskColor" type="String">
+            <default></default>
+        </entry>
+        <entry name="uptimeColor" type="String">
             <default></default>
         </entry>
         <entry name="warnColor" type="String">
