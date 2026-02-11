@@ -8,7 +8,7 @@ A minimal, color-coded system monitor widget for the KDE Plasma 6 panel. Display
 ## What It Looks Like
 
 ```
-CPU 2%      GPU 8%      RAM 45%   |   BAT 80%
+CPU 2%   GPU 8%   RAM 45%   BAT 80%
 ```
 
 Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple, **BAT** in yellow. Colors turn **red** when thresholds are hit (90% for usage, 15% for battery).
@@ -18,11 +18,12 @@ Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple
 - **CPU usage** — reads from `/proc/stat` with delta calculation
 - **GPU usage** — queries KDE's KSystemStats via D-Bus (works with any driver: nouveau, i915, amdgpu, nvidia)
 - **RAM usage** — reads from `/proc/meminfo`, can display as percentage or GB
-- **Battery level** — reads from `/sys/class/power_supply/`, separated by a `|` spacer
+- **Battery level** — reads from `/sys/class/power_supply/`, optional `|` separator
 - **1-second updates** by default (configurable 1–60s)
 - **Two color themes** — normal and bright (for dark panels)
 - **Red warnings** — CPU/GPU/RAM turn red at 90%+, battery at 15% or below
-- **Fully configurable** — show/hide each metric, decimal precision, RAM in GB, battery position, update interval
+- **Configurable spacing** — adjust space between items (default 3, range 1–10)
+- **Fully configurable** — show/hide each metric, decimal precision, RAM in GB, battery position, separator style, update interval
 
 ## Settings
 
@@ -36,6 +37,8 @@ Right-click the widget → Configure → General:
 | Bright colors | High-contrast colors for dark panel themes |
 | Warnings | Red color at 90% usage / 15% battery |
 | Battery position | Battery on right or left side |
+| Item spacing | Space between items (1–10, default 3) |
+| Battery separator | Show `\|` divider between battery and other items |
 | Update interval | Refresh rate from 1 to 60 seconds |
 
 ## Installation

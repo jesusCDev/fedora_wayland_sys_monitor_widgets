@@ -35,6 +35,8 @@ PlasmoidItem {
     property int updateIntervalSec: Plasmoid.configuration.updateIntervalSec
     property bool batOnRight: Plasmoid.configuration.batOnRight
     property bool showChargingIcon: Plasmoid.configuration.showChargingIcon
+    property int itemSpacing: Plasmoid.configuration.itemSpacing
+    property bool showBatSpacer: Plasmoid.configuration.showBatSpacer
 
     // Custom color overrides (empty string = use default)
     property string cpuColorOverride: Plasmoid.configuration.cpuColor
@@ -81,8 +83,15 @@ PlasmoidItem {
 
     // Build colored HTML for the panel
     function panelHtml() {
-        var sep = '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
-        var spacer = '&nbsp;&nbsp;&nbsp;<span style="color:#FFFFFF;">|</span>&nbsp;&nbsp;&nbsp;'
+        var sep = ''
+        for (var i = 0; i < itemSpacing; i++) sep += '&nbsp;'
+
+        var batSep = sep
+        if (showBatSpacer) {
+            var pad = ''
+            for (var j = 0; j < 3; j++) pad += '&nbsp;'
+            batSep = pad + '<span style="color:#FFFFFF;">|</span>' + pad
+        }
 
         // System metrics group
         var sys = []
@@ -93,7 +102,7 @@ PlasmoidItem {
         if (showRam)
             sys.push('<b><span style="color:' + ramHex + ';">RAM ' + fmtRam() + '</span></b>')
 
-        // Battery (separate with spacer)
+        // Battery
         var bat = ''
         if (showBat && batValue >= 0) {
             var bolt = (showChargingIcon && batCharging) ? ' <span style="color:#FFFFFF;">&#x21AF;</span>' : ''
@@ -106,9 +115,9 @@ PlasmoidItem {
         if (sysStr === '') return bat
 
         if (batOnRight)
-            return sysStr + spacer + bat
+            return sysStr + batSep + bat
         else
-            return bat + spacer + sysStr
+            return bat + batSep + sysStr
     }
 
     // ── Panel view ──────────────────────────────────────────────

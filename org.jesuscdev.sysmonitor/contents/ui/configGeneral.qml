@@ -17,6 +17,8 @@ Kirigami.FormLayout {
     property alias cfg_updateIntervalSec: intervalSpin.value
     property alias cfg_batOnRight: batRightCheck.checked
     property alias cfg_showChargingIcon: chargingIconCheck.checked
+    property alias cfg_itemSpacing: spacingSpin.value
+    property alias cfg_showBatSpacer: batSpacerCheck.checked
     property alias cfg_cpuColor: cpuColorField.text
     property alias cfg_gpuColor: gpuColorField.text
     property alias cfg_ramColor: ramColorField.text
@@ -91,6 +93,20 @@ Kirigami.FormLayout {
         id: chargingIconCheck
         Kirigami.FormData.label: "Charging icon:"
         text: "Show lightning bolt when charging"
+    }
+
+    SpinBox {
+        id: spacingSpin
+        Kirigami.FormData.label: "Item spacing:"
+        from: 1
+        to: 10
+        stepSize: 1
+    }
+
+    CheckBox {
+        id: batSpacerCheck
+        Kirigami.FormData.label: "Battery separator:"
+        text: "Show | divider between battery and other items"
     }
 
     SpinBox {
