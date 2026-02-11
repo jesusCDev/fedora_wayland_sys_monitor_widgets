@@ -240,9 +240,9 @@ PlasmoidItem {
             var bolt = ''
             if (showChargingIcon && batCharging) {
                 if (faFont.status === FontLoader.Ready)
-                    bolt = ' <span style="font-family:\'' + faFont.name + '\'; color:' + batHex + ';">&#xf0e7;</span>'
+                    bolt = ' <span style="font-family:\'' + faFont.name + '\'; color:#FFFFFF;">&#xf0e7;</span>'
                 else
-                    bolt = ' <span style="color:' + batHex + ';">&#x26A1;</span>'
+                    bolt = ' <span style="color:#FFFFFF;">&#x26A1;</span>'
             }
             var batTimeStr = showBatTime ? (' ' + fmtBatTime()) : ''
             bat = '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', 'f240', batHex) + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
@@ -347,7 +347,7 @@ PlasmoidItem {
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%'
                     + (root.showBatTime ? '  ' + root.fmtBatTime() : '') + '</b></span>'
-                    + ((root.showChargingIcon && root.batCharging) ? ' <span style="font-family:\'' + faFont.name + '\'; color:' + root.batHex + '; font-size:12pt;">&#xf0e7;</span>' : '')
+                    + ((root.showChargingIcon && root.batCharging) ? ' <span style="font-family:\'' + faFont.name + '\'; color:#FFFFFF; font-size:12pt;">&#xf0e7;</span>' : '')
             }
         }
     }
@@ -626,7 +626,7 @@ PlasmoidItem {
         if (showRam)
             ramSource.connectSource("head -3 /proc/meminfo")
         if (showGpu)
-            gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/usage 2>/dev/null; busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
+            gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/usage >/dev/null 2>&1; busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
         if (showBat || batteryModeEnabled)
             batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); cl=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"'")
 
