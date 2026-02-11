@@ -28,6 +28,7 @@ PlasmoidItem {
     property real batEnergyNow: 0.0
     property real batEnergyFull: 0.0
     property real batPowerNow: 0.0
+    property int batChargeLimit: 100  // 0-100, from charge_control_end_threshold
 
     // CPU delta tracking
     property real prevCpuIdle: 0
@@ -170,10 +171,13 @@ PlasmoidItem {
     function fmtBatTime() {
         if (batPowerNow <= 0) return ''
         var hours = 0
-        if (batCharging)
-            hours = (batEnergyFull - batEnergyNow) / batPowerNow
-        else
+        if (batCharging) {
+            var targetEnergy = batEnergyFull * (batChargeLimit / 100.0)
+            if (batEnergyNow >= targetEnergy) return ''
+            hours = (targetEnergy - batEnergyNow) / batPowerNow
+        } else {
             hours = batEnergyNow / batPowerNow
+        }
         if (hours < 0 || hours > 99) return ''
         var h = Math.floor(hours)
         var m = Math.round((hours - h) * 60)
@@ -198,7 +202,7 @@ PlasmoidItem {
         if (showBatSpacer) {
             var pad = ''
             for (var j = 0; j < 3; j++) pad += '&nbsp;'
-            batSep = pad + '<span style="color:#FFFFFF;">|</span>' + pad
+            batSep = pad + '<span style="color:#888888;">&#x2502;</span>' + pad
         }
 
         // System metrics group
@@ -233,7 +237,13 @@ PlasmoidItem {
         // Battery
         var bat = ''
         if (showBat && batValue >= 0) {
-            var bolt = (showChargingIcon && batCharging) ? ' <span style="color:#FFFFFF;">&#x21AF;</span>' : ''
+            var bolt = ''
+            if (showChargingIcon && batCharging) {
+                if (faFont.status === FontLoader.Ready)
+                    bolt = ' <span style="font-family:\'' + faFont.name + '\'; color:' + batHex + ';">&#xf0e7;</span>'
+                else
+                    bolt = ' <span style="color:' + batHex + ';">&#x26A1;</span>'
+            }
             var batTimeStr = showBatTime ? (' ' + fmtBatTime()) : ''
             bat = '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', 'f240', batHex) + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
         }
@@ -337,7 +347,7 @@ PlasmoidItem {
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%'
                     + (root.showBatTime ? '  ' + root.fmtBatTime() : '') + '</b></span>'
-                    + ((root.showChargingIcon && root.batCharging) ? ' <span style="color:#FFFFFF; font-size:12pt;"><b>&#x21AF;</b></span>' : '')
+                    + ((root.showChargingIcon && root.batCharging) ? ' <span style="font-family:\'' + faFont.name + '\'; color:' + root.batHex + '; font-size:12pt;">&#xf0e7;</span>' : '')
             }
         }
     }
@@ -457,17 +467,6 @@ PlasmoidItem {
                         gpuValue = val
                     }
                 }
-            }
-        }
-    }
-
-    PlasmaSupport.DataSource {
-        id: gpuSubscribe
-        engine: "executable"
-        connectedSources: []
-        onNewData: function(source, data) {
-            if (data["exit code"] !== undefined) {
-                disconnectSource(source)
             }
         }
     }
@@ -602,6 +601,12 @@ PlasmoidItem {
                 batEnergyNow = (parseFloat(enNow) || 0) / 1000000.0
                 batEnergyFull = (parseFloat(enFull) || 0) / 1000000.0
                 batPowerNow = (parseFloat(pwNow) || 0) / 1000000.0
+                var clStr = (parts[5] || "100").trim()
+                var clVal = parseInt(clStr)
+                if (!isNaN(clVal) && clVal > 0 && clVal <= 100)
+                    batChargeLimit = clVal
+                else
+                    batChargeLimit = 100
             }
         }
     }
@@ -621,9 +626,9 @@ PlasmoidItem {
         if (showRam)
             ramSource.connectSource("head -3 /proc/meminfo")
         if (showGpu)
-            gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
+            gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/usage 2>/dev/null; busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
         if (showBat || batteryModeEnabled)
-            batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); echo \"$cap|$ac|$en|$ef|$pw\"'")
+            batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); cl=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"'")
 
         if (showCpuTemp || showGpuTemp) {
             tempSource.connectSource("sh -c 'ct=0; gt=0; for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name 2>/dev/null); if [ \"$n\" = \"coretemp\" ]; then v=$(cat $d/temp1_input 2>/dev/null); [ -n \"$v\" ] && ct=$((v/1000)); fi; if [ \"$n\" = \"thinkpad\" ]; then v=$(cat $d/temp2_input 2>/dev/null); [ -n \"$v\" ] && gt=$((v/1000)); fi; done; echo \"$ct $gt\"'")
@@ -643,7 +648,6 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
-        gpuSubscribe.connectSource("busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/usage")
         refreshAll()
     }
 }

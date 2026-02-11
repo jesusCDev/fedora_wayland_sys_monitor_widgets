@@ -19,7 +19,8 @@ Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple
 - **GPU usage** — queries KDE's KSystemStats via D-Bus (works with any driver: nouveau, i915, amdgpu, nvidia)
 - **RAM usage** — reads from `/proc/meminfo`, can display as percentage or GB
 - **Network speed** — live download rate with auto-scaling units (B/s, K/s, M/s, G/s)
-- **Battery level** — reads from `/sys/class/power_supply/`, with optional time remaining and `|` separator
+- **Battery level** — reads from `/sys/class/power_supply/`, with optional time remaining and `│` separator
+- **Charge limit aware** — battery time-to-full respects `charge_control_end_threshold` (e.g. 80% charge protection)
 - **CPU/GPU temperature** — via hwmon sysfs sensors, displayed in °C (disabled by default)
 - **Disk usage** — root filesystem usage percentage (disabled by default)
 - **System uptime** — formatted as `3d 4h` or `2h 30m` (disabled by default)
@@ -37,30 +38,36 @@ Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple
 
 ## Settings
 
-Right-click the widget → Configure → General:
+Right-click the widget → Configure. Settings are organized into 4 tabs:
 
+### Metrics
+Toggle each metric on/off: CPU, GPU, RAM, Network, Disk, Uptime, Battery, Battery time remaining, CPU/GPU temperature (°C).
+
+### Display
 | Setting | Description |
 |---------|-------------|
-| Show CPU/GPU/RAM/Network/Battery | Toggle each metric on/off |
-| CPU/GPU temperature (°C) | Show hardware temperatures next to usage |
-| Disk usage | Show root filesystem usage |
-| Uptime | Show system uptime |
-| Battery time remaining | Show estimated time to empty/full |
 | Show decimals | Display values like `1.2%` instead of `1%` |
 | RAM in GB | Show `7.4GB` instead of `23%` |
 | Bright colors | High-contrast colors for dark panel themes |
 | Trend arrows | Show rise/fall indicators on metrics |
 | Icons | Use Font Awesome icons instead of text labels |
+| Battery position | Battery on right or left side |
+| Charging icon | Show lightning bolt when charging |
+| Battery separator | Show `│` divider between battery and other items |
+| Item spacing | Space between items (1–10, default 3) |
+
+### Alerts
+| Setting | Description |
+|---------|-------------|
 | Warnings | Color change at configurable thresholds |
 | Warning thresholds | Per-metric threshold (CPU, GPU, RAM, battery) |
-| Battery position | Battery on right or left side |
-| Battery separator | Show `\|` divider between battery and other items |
+| Update interval | Refresh rate from 1 to 60 seconds |
 | Battery mode | Reduce refresh rate when on battery power |
 | Battery mode interval | Refresh interval when on battery (1–60s, default 5) |
-| Item spacing | Space between items (1–10, default 3) |
 | Click command | Command to run on left-click (default: `wezterm -e htop`) |
-| Update interval | Refresh rate from 1 to 60 seconds |
-| Custom colors | Override color for any metric with text input or color picker |
+
+### Colors
+Override color for any individual metric with text input or color picker. Leave empty for default.
 
 ## Installation
 
@@ -122,12 +129,15 @@ org.jesuscdev.sysmonitor/
   contents/
     config/
       main.xml                     # Configuration schema (all settings)
-      config.qml                   # Registers the config page
+      config.qml                   # Registers the 4 config tabs
     fonts/
       fa-solid-900.ttf             # Font Awesome 6 Free Solid (optional icons)
     ui/
       main.qml                     # Widget logic, display, and data collection
-      configGeneral.qml            # Settings UI for the Configure dialog
+      configMetrics.qml            # Settings: which metrics to show
+      configDisplay.qml            # Settings: formatting and layout
+      configAlerts.qml             # Settings: thresholds, intervals, actions
+      configColors.qml             # Settings: custom color pickers
 ```
 
 ## Requirements
