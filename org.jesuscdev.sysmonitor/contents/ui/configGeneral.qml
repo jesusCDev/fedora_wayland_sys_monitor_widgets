@@ -3,7 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.kde.kirigami 2.20 as Kirigami
 
-Kirigami.FormLayout {
+ScrollView {
     id: configPage
 
     property alias cfg_useDecimals: decimalsCheck.checked
@@ -40,233 +40,237 @@ Kirigami.FormLayout {
     property alias cfg_uptimeColor: uptimeColorField.text
     property alias cfg_warnColor: warnColorField.text
 
-    Kirigami.Separator {
-        Kirigami.FormData.isSection: true
-        Kirigami.FormData.label: "Visible Items"
-    }
+    Kirigami.FormLayout {
+        width: configPage.availableWidth
 
-    CheckBox {
-        id: cpuCheck
-        Kirigami.FormData.label: "CPU:"
-        text: "Show CPU usage"
-    }
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Visible Items"
+        }
 
-    CheckBox {
-        id: cpuTempCheck
-        Kirigami.FormData.label: "CPU temp:"
-        text: "Show CPU temperature"
-    }
+        CheckBox {
+            id: cpuCheck
+            Kirigami.FormData.label: "CPU:"
+            text: "Show CPU usage"
+        }
 
-    CheckBox {
-        id: gpuCheck
-        Kirigami.FormData.label: "GPU:"
-        text: "Show GPU usage"
-    }
+        CheckBox {
+            id: cpuTempCheck
+            Kirigami.FormData.label: "CPU temp:"
+            text: "Show CPU temperature"
+        }
 
-    CheckBox {
-        id: gpuTempCheck
-        Kirigami.FormData.label: "GPU temp:"
-        text: "Show GPU temperature"
-    }
+        CheckBox {
+            id: gpuCheck
+            Kirigami.FormData.label: "GPU:"
+            text: "Show GPU usage"
+        }
 
-    CheckBox {
-        id: ramCheck
-        Kirigami.FormData.label: "RAM:"
-        text: "Show RAM usage"
-    }
+        CheckBox {
+            id: gpuTempCheck
+            Kirigami.FormData.label: "GPU temp:"
+            text: "Show GPU temperature"
+        }
 
-    CheckBox {
-        id: netCheck
-        Kirigami.FormData.label: "Network:"
-        text: "Show network download speed"
-    }
+        CheckBox {
+            id: ramCheck
+            Kirigami.FormData.label: "RAM:"
+            text: "Show RAM usage"
+        }
 
-    CheckBox {
-        id: diskCheck
-        Kirigami.FormData.label: "Disk:"
-        text: "Show disk usage"
-    }
+        CheckBox {
+            id: netCheck
+            Kirigami.FormData.label: "Network:"
+            text: "Show network download speed"
+        }
 
-    CheckBox {
-        id: uptimeCheck
-        Kirigami.FormData.label: "Uptime:"
-        text: "Show system uptime"
-    }
+        CheckBox {
+            id: diskCheck
+            Kirigami.FormData.label: "Disk:"
+            text: "Show disk usage"
+        }
 
-    CheckBox {
-        id: batCheck
-        Kirigami.FormData.label: "Battery:"
-        text: "Show battery level"
-    }
+        CheckBox {
+            id: uptimeCheck
+            Kirigami.FormData.label: "Uptime:"
+            text: "Show system uptime"
+        }
 
-    CheckBox {
-        id: batTimeCheck
-        Kirigami.FormData.label: "Battery time:"
-        text: "Show estimated time remaining"
-    }
+        CheckBox {
+            id: batCheck
+            Kirigami.FormData.label: "Battery:"
+            text: "Show battery level"
+        }
 
-    Kirigami.Separator {
-        Kirigami.FormData.isSection: true
-        Kirigami.FormData.label: "Display"
-    }
+        CheckBox {
+            id: batTimeCheck
+            Kirigami.FormData.label: "Battery time:"
+            text: "Show estimated time remaining"
+        }
 
-    CheckBox {
-        id: decimalsCheck
-        Kirigami.FormData.label: "Decimals:"
-        text: "Show decimal values (e.g. 1.2% instead of 1%)"
-    }
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Display"
+        }
 
-    CheckBox {
-        id: ramGBCheck
-        Kirigami.FormData.label: "RAM display:"
-        text: "Show RAM in GB instead of percentage"
-    }
+        CheckBox {
+            id: decimalsCheck
+            Kirigami.FormData.label: "Decimals:"
+            text: "Show decimal values (e.g. 1.2% instead of 1%)"
+        }
 
-    CheckBox {
-        id: brightCheck
-        Kirigami.FormData.label: "Colors:"
-        text: "Use bright/vivid colors (for dark panels)"
-    }
+        CheckBox {
+            id: ramGBCheck
+            Kirigami.FormData.label: "RAM display:"
+            text: "Show RAM in GB instead of percentage"
+        }
 
-    CheckBox {
-        id: warnCheck
-        Kirigami.FormData.label: "Warnings:"
-        text: "Color change at warning thresholds"
-    }
+        CheckBox {
+            id: brightCheck
+            Kirigami.FormData.label: "Colors:"
+            text: "Use bright/vivid colors (for dark panels)"
+        }
 
-    CheckBox {
-        id: trendCheck
-        Kirigami.FormData.label: "Trend arrows:"
-        text: "Show arrows when values rise or fall"
-    }
+        CheckBox {
+            id: warnCheck
+            Kirigami.FormData.label: "Warnings:"
+            text: "Color change at warning thresholds"
+        }
 
-    CheckBox {
-        id: batRightCheck
-        Kirigami.FormData.label: "Battery position:"
-        text: "Move battery to right side"
-    }
+        CheckBox {
+            id: trendCheck
+            Kirigami.FormData.label: "Trend arrows:"
+            text: "Show arrows when values rise or fall"
+        }
 
-    CheckBox {
-        id: chargingIconCheck
-        Kirigami.FormData.label: "Charging icon:"
-        text: "Show lightning bolt when charging"
-    }
+        CheckBox {
+            id: batRightCheck
+            Kirigami.FormData.label: "Battery position:"
+            text: "Move battery to right side"
+        }
 
-    CheckBox {
-        id: batSpacerCheck
-        Kirigami.FormData.label: "Battery separator:"
-        text: "Show | divider between battery and other items"
-    }
+        CheckBox {
+            id: chargingIconCheck
+            Kirigami.FormData.label: "Charging icon:"
+            text: "Show lightning bolt when charging"
+        }
 
-    SpinBox {
-        id: spacingSpin
-        Kirigami.FormData.label: "Item spacing:"
-        from: 1
-        to: 10
-        stepSize: 1
-    }
+        CheckBox {
+            id: batSpacerCheck
+            Kirigami.FormData.label: "Battery separator:"
+            text: "Show | divider between battery and other items"
+        }
 
-    SpinBox {
-        id: intervalSpin
-        Kirigami.FormData.label: "Update interval (seconds):"
-        from: 1
-        to: 60
-        stepSize: 1
-    }
+        SpinBox {
+            id: spacingSpin
+            Kirigami.FormData.label: "Item spacing:"
+            from: 1
+            to: 10
+            stepSize: 1
+        }
 
-    TextField {
-        id: clickCommandField
-        Kirigami.FormData.label: "Click command:"
-        placeholderText: "wezterm -e htop"
-    }
+        SpinBox {
+            id: intervalSpin
+            Kirigami.FormData.label: "Update interval (seconds):"
+            from: 1
+            to: 60
+            stepSize: 1
+        }
 
-    Kirigami.Separator {
-        Kirigami.FormData.isSection: true
-        Kirigami.FormData.label: "Warning Thresholds"
-    }
+        TextField {
+            id: clickCommandField
+            Kirigami.FormData.label: "Click command:"
+            placeholderText: "wezterm -e htop"
+        }
 
-    SpinBox {
-        id: cpuWarnSpin
-        Kirigami.FormData.label: "CPU warning (%):"
-        from: 0
-        to: 100
-        stepSize: 5
-    }
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Warning Thresholds"
+        }
 
-    SpinBox {
-        id: gpuWarnSpin
-        Kirigami.FormData.label: "GPU warning (%):"
-        from: 0
-        to: 100
-        stepSize: 5
-    }
+        SpinBox {
+            id: cpuWarnSpin
+            Kirigami.FormData.label: "CPU warning (%):"
+            from: 0
+            to: 100
+            stepSize: 5
+        }
 
-    SpinBox {
-        id: ramWarnSpin
-        Kirigami.FormData.label: "RAM warning (%):"
-        from: 0
-        to: 100
-        stepSize: 5
-    }
+        SpinBox {
+            id: gpuWarnSpin
+            Kirigami.FormData.label: "GPU warning (%):"
+            from: 0
+            to: 100
+            stepSize: 5
+        }
 
-    SpinBox {
-        id: batWarnSpin
-        Kirigami.FormData.label: "Battery warning (%):"
-        from: 0
-        to: 100
-        stepSize: 5
-    }
+        SpinBox {
+            id: ramWarnSpin
+            Kirigami.FormData.label: "RAM warning (%):"
+            from: 0
+            to: 100
+            stepSize: 5
+        }
 
-    Kirigami.Separator {
-        Kirigami.FormData.isSection: true
-        Kirigami.FormData.label: "Custom Colors (leave empty for default)"
-    }
+        SpinBox {
+            id: batWarnSpin
+            Kirigami.FormData.label: "Battery warning (%):"
+            from: 0
+            to: 100
+            stepSize: 5
+        }
 
-    TextField {
-        id: cpuColorField
-        Kirigami.FormData.label: "CPU color:"
-        placeholderText: "#80D8FF"
-    }
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Custom Colors (leave empty for default)"
+        }
 
-    TextField {
-        id: gpuColorField
-        Kirigami.FormData.label: "GPU color:"
-        placeholderText: "#69F0AE"
-    }
+        TextField {
+            id: cpuColorField
+            Kirigami.FormData.label: "CPU color:"
+            placeholderText: "#80D8FF"
+        }
 
-    TextField {
-        id: ramColorField
-        Kirigami.FormData.label: "RAM color:"
-        placeholderText: "#EA80FC"
-    }
+        TextField {
+            id: gpuColorField
+            Kirigami.FormData.label: "GPU color:"
+            placeholderText: "#69F0AE"
+        }
 
-    TextField {
-        id: netColorField
-        Kirigami.FormData.label: "Network color:"
-        placeholderText: "#80DEEA"
-    }
+        TextField {
+            id: ramColorField
+            Kirigami.FormData.label: "RAM color:"
+            placeholderText: "#EA80FC"
+        }
 
-    TextField {
-        id: diskColorField
-        Kirigami.FormData.label: "Disk color:"
-        placeholderText: "#FFB74D"
-    }
+        TextField {
+            id: netColorField
+            Kirigami.FormData.label: "Network color:"
+            placeholderText: "#80DEEA"
+        }
 
-    TextField {
-        id: uptimeColorField
-        Kirigami.FormData.label: "Uptime color:"
-        placeholderText: "#ECEFF1"
-    }
+        TextField {
+            id: diskColorField
+            Kirigami.FormData.label: "Disk color:"
+            placeholderText: "#FFB74D"
+        }
 
-    TextField {
-        id: batColorField
-        Kirigami.FormData.label: "Battery color:"
-        placeholderText: "#FFEE58"
-    }
+        TextField {
+            id: uptimeColorField
+            Kirigami.FormData.label: "Uptime color:"
+            placeholderText: "#ECEFF1"
+        }
 
-    TextField {
-        id: warnColorField
-        Kirigami.FormData.label: "Warning color:"
-        placeholderText: "#FF5252"
+        TextField {
+            id: batColorField
+            Kirigami.FormData.label: "Battery color:"
+            placeholderText: "#FFEE58"
+        }
+
+        TextField {
+            id: warnColorField
+            Kirigami.FormData.label: "Warning color:"
+            placeholderText: "#FF5252"
+        }
     }
 }
