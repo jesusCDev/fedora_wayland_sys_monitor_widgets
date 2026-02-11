@@ -97,7 +97,7 @@ ScrollView {
         TextField {
             id: clickCommandField
             Kirigami.FormData.label: "Click command:"
-            placeholderText: "wezterm -e htop"
+            placeholderText: "konsole -e htop"
         }
     }
 }

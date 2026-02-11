@@ -238,6 +238,16 @@ PlasmoidItem {
         Layout.preferredWidth: panelRow.implicitWidth + 24
         Layout.minimumWidth: panelRow.implicitWidth + 24
 
+        TextMetrics {
+            id: spacerMetrics
+            font.pointSize: 10
+            text: {
+                var s = ""
+                for (var i = 0; i < root.itemSpacing; i++) s += "\u00A0"
+                return s
+            }
+        }
+
         Row {
             id: panelRow
             anchors.centerIn: parent
@@ -263,7 +273,7 @@ PlasmoidItem {
 
             // System metrics
             Row {
-                spacing: root.itemSpacing * 4
+                spacing: spacerMetrics.width
 
                 Text {
                     visible: root.showCpu

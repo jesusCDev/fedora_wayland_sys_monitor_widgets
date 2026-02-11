@@ -49,7 +49,7 @@
             <default>false</default>
         </entry>
         <entry name="clickCommand" type="String">
-            <default>wezterm -e htop</default>
+            <default>konsole -e htop</default>
         </entry>
         <entry name="showNet" type="Bool">
             <default>true</default>
