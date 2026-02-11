@@ -10,6 +10,9 @@ PlasmoidItem {
     id: root
     preferredRepresentation: Plasmoid.compactRepresentation
 
+    // Font Awesome
+    FontLoader { id: faFont; source: "../fonts/fa-solid-900.ttf" }
+
     // Current values (raw decimals)
     property real cpuValue: 0.0
     property real gpuValue: 0.0
@@ -62,6 +65,9 @@ PlasmoidItem {
     property int itemSpacing: Plasmoid.configuration.itemSpacing
     property bool showBatSpacer: Plasmoid.configuration.showBatSpacer
     property string clickCommand: Plasmoid.configuration.clickCommand
+    property bool useIcons: Plasmoid.configuration.useIcons
+    property bool batteryModeEnabled: Plasmoid.configuration.batteryModeEnabled
+    property int batteryModeInterval: Plasmoid.configuration.batteryModeInterval
 
     // Warning thresholds
     property int cpuWarnThreshold: Plasmoid.configuration.cpuWarnThreshold
@@ -78,6 +84,13 @@ PlasmoidItem {
     property string diskColorOverride: Plasmoid.configuration.diskColor
     property string uptimeColorOverride: Plasmoid.configuration.uptimeColor
     property string warnColorOverride: Plasmoid.configuration.warnColor
+
+    // Effective interval (accounts for battery mode)
+    property int effectiveIntervalMs: {
+        if (batteryModeEnabled && batValue >= 0 && !batCharging)
+            return batteryModeInterval * 1000
+        return updateIntervalSec * 1000
+    }
 
     // ── Color definitions ───────────────────────────────────────
     readonly property string cpuHexNormal: "#42A5F5"    // blue
@@ -116,6 +129,17 @@ PlasmoidItem {
         ? warnHex : (diskColorOverride !== "" ? diskColorOverride : (brightColors ? diskHexBright : diskHexNormal))
     property string uptimeHex: uptimeColorOverride !== ""
         ? uptimeColorOverride : (brightColors ? uptimeHexBright : uptimeHexNormal)
+
+    // ── Font Awesome icon helpers ─────────────────────────────────
+    function faIcon(unicode, color) {
+        return '<span style="font-family:\'' + faFont.name + '\'; color:' + color + ';">&#x' + unicode + ';</span> '
+    }
+
+    function metricLabel(text, iconUnicode, color) {
+        if (useIcons && faFont.status === FontLoader.Ready)
+            return faIcon(iconUnicode, color)
+        return text + ' '
+    }
 
     // Format helpers
     function fmt(val) {
@@ -160,8 +184,8 @@ PlasmoidItem {
     function trendArrow(current, previous) {
         if (!showTrendArrows) return ''
         var delta = current - previous
-        if (delta > 2) return ' &#x2191;'   // ↑
-        if (delta < -2) return ' &#x2193;'  // ↓
+        if (delta > 2) return ' &#x2191;'   // up arrow
+        if (delta < -2) return ' &#x2193;'  // down arrow
         return ''
     }
 
@@ -180,30 +204,30 @@ PlasmoidItem {
         // System metrics group
         var sys = []
         if (showCpu) {
-            var cpuStr = 'CPU ' + fmt(cpuValue) + '%'
-            if (showCpuTemp) cpuStr += ' ' + Math.round(cpuTemp) + '°'
+            var cpuStr = metricLabel('CPU', 'f2db', cpuHex) + fmt(cpuValue) + '%'
+            if (showCpuTemp && cpuTemp > 0) cpuStr += ' ' + Math.round(cpuTemp) + '°'
             cpuStr += trendArrow(cpuValue, prevCpuDisplay)
             sys.push('<b><span style="color:' + cpuHex + ';">' + cpuStr + '</span></b>')
         }
         if (showGpu) {
-            var gpuStr = 'GPU ' + fmt(gpuValue) + '%'
-            if (showGpuTemp) gpuStr += ' ' + Math.round(gpuTemp) + '°'
+            var gpuStr = metricLabel('GPU', 'f625', gpuHex) + fmt(gpuValue) + '%'
+            if (showGpuTemp && gpuTemp > 0) gpuStr += ' ' + Math.round(gpuTemp) + '°'
             gpuStr += trendArrow(gpuValue, prevGpuDisplay)
             sys.push('<b><span style="color:' + gpuHex + ';">' + gpuStr + '</span></b>')
         }
         if (showRam) {
-            var ramStr = 'RAM ' + fmtRam()
+            var ramStr = metricLabel('RAM', 'f538', ramHex) + fmtRam()
             ramStr += trendArrow(ramValue, prevRamDisplay)
             sys.push('<b><span style="color:' + ramHex + ';">' + ramStr + '</span></b>')
         }
         if (showNet) {
-            sys.push('<b><span style="color:' + netHex + ';">NET ' + fmtNetSpeed(netDownBytes) + '</span></b>')
+            sys.push('<b><span style="color:' + netHex + ';">' + metricLabel('NET', 'f019', netHex) + fmtNetSpeed(netDownBytes) + '</span></b>')
         }
         if (showDisk) {
-            sys.push('<b><span style="color:' + diskHex + ';">DISK ' + fmt(diskValue) + '%</span></b>')
+            sys.push('<b><span style="color:' + diskHex + ';">' + metricLabel('DISK', 'f0a0', diskHex) + fmt(diskValue) + '%</span></b>')
         }
         if (showUptime) {
-            sys.push('<b><span style="color:' + uptimeHex + ';">UP ' + fmtUptime(uptimeSecs) + '</span></b>')
+            sys.push('<b><span style="color:' + uptimeHex + ';">' + metricLabel('UP', 'f017', uptimeHex) + fmtUptime(uptimeSecs) + '</span></b>')
         }
 
         // Battery
@@ -211,7 +235,7 @@ PlasmoidItem {
         if (showBat && batValue >= 0) {
             var bolt = (showChargingIcon && batCharging) ? ' <span style="color:#FFFFFF;">&#x21AF;</span>' : ''
             var batTimeStr = showBatTime ? (' ' + fmtBatTime()) : ''
-            bat = '<b><span style="color:' + batHex + ';">BAT ' + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
+            bat = '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', 'f240', batHex) + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
         }
 
         var sysStr = sys.join(sep)
@@ -280,13 +304,13 @@ PlasmoidItem {
                 visible: root.showCpu
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.cpuHex + '; font-size:12pt;"><b>CPU:  ' + root.fmt(root.cpuValue) + '%'
-                    + (root.showCpuTemp ? '  ' + Math.round(root.cpuTemp) + '°C' : '') + '</b></span>'
+                    + (root.showCpuTemp && root.cpuTemp > 0 ? '  ' + Math.round(root.cpuTemp) + '°C' : '') + '</b></span>'
             }
             Text {
                 visible: root.showGpu
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.gpuHex + '; font-size:12pt;"><b>GPU:  ' + root.fmt(root.gpuValue) + '%'
-                    + (root.showGpuTemp ? '  ' + Math.round(root.gpuTemp) + '°C' : '') + '</b></span>'
+                    + (root.showGpuTemp && root.gpuTemp > 0 ? '  ' + Math.round(root.gpuTemp) + '°C' : '') + '</b></span>'
             }
             Text {
                 visible: root.showRam
@@ -467,7 +491,6 @@ PlasmoidItem {
     }
 
     function parseTempData(output) {
-        // Output format: "cpuTemp gpuTemp" (two values separated by space)
         var parts = output.split(/\s+/)
         if (parts.length >= 1) {
             var ct = parseFloat(parts[0])
@@ -498,12 +521,12 @@ PlasmoidItem {
     }
 
     function parseNetData(output) {
-        // Output is total RX bytes across all non-lo interfaces
         var totalRx = parseFloat(output) || 0
         if (!netFirstRun) {
             var delta = totalRx - prevNetRxBytes
             if (delta >= 0) {
-                netDownBytes = delta / updateIntervalSec
+                var intervalSec = effectiveIntervalMs / 1000
+                netDownBytes = delta / intervalSec
             }
         }
         netFirstRun = false
@@ -583,20 +606,24 @@ PlasmoidItem {
         }
     }
 
-    // ── Timer (interval driven by config) ───────────────────────
+    // ── Timer (interval driven by config + battery mode) ─────────
     Timer {
         id: updateTimer
-        interval: root.updateIntervalSec * 1000
+        interval: root.effectiveIntervalMs
         running: true
         repeat: true
         onTriggered: refreshAll()
     }
 
     function refreshAll() {
-        cpuSource.connectSource("head -1 /proc/stat")
-        ramSource.connectSource("head -3 /proc/meminfo")
-        gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
-        batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); echo \"$cap|$ac|$en|$ef|$pw\"'")
+        if (showCpu)
+            cpuSource.connectSource("head -1 /proc/stat")
+        if (showRam)
+            ramSource.connectSource("head -3 /proc/meminfo")
+        if (showGpu)
+            gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
+        if (showBat || batteryModeEnabled)
+            batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); echo \"$cap|$ac|$en|$ef|$pw\"'")
 
         if (showCpuTemp || showGpuTemp) {
             tempSource.connectSource("sh -c 'ct=0; gt=0; for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name 2>/dev/null); if [ \"$n\" = \"coretemp\" ]; then v=$(cat $d/temp1_input 2>/dev/null); [ -n \"$v\" ] && ct=$((v/1000)); fi; if [ \"$n\" = \"thinkpad\" ]; then v=$(cat $d/temp2_input 2>/dev/null); [ -n \"$v\" ] && gt=$((v/1000)); fi; done; echo \"$ct $gt\"'")

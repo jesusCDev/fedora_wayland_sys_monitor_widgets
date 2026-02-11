@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Dialogs as QtDialogs
 import org.kde.kirigami 2.20 as Kirigami
 
 ScrollView {
@@ -27,6 +28,9 @@ ScrollView {
     property alias cfg_itemSpacing: spacingSpin.value
     property alias cfg_showBatSpacer: batSpacerCheck.checked
     property alias cfg_clickCommand: clickCommandField.text
+    property alias cfg_useIcons: iconsCheck.checked
+    property alias cfg_batteryModeEnabled: batModeCheck.checked
+    property alias cfg_batteryModeInterval: batModeIntervalSpin.value
     property alias cfg_cpuWarnThreshold: cpuWarnSpin.value
     property alias cfg_gpuWarnThreshold: gpuWarnSpin.value
     property alias cfg_ramWarnThreshold: ramWarnSpin.value
@@ -56,7 +60,7 @@ ScrollView {
 
         CheckBox {
             id: cpuTempCheck
-            Kirigami.FormData.label: "CPU temp:"
+            Kirigami.FormData.label: "CPU temp (\u00B0C):"
             text: "Show CPU temperature"
         }
 
@@ -68,7 +72,7 @@ ScrollView {
 
         CheckBox {
             id: gpuTempCheck
-            Kirigami.FormData.label: "GPU temp:"
+            Kirigami.FormData.label: "GPU temp (\u00B0C):"
             text: "Show GPU temperature"
         }
 
@@ -144,6 +148,12 @@ ScrollView {
         }
 
         CheckBox {
+            id: iconsCheck
+            Kirigami.FormData.label: "Icons:"
+            text: "Use icons instead of text labels"
+        }
+
+        CheckBox {
             id: batRightCheck
             Kirigami.FormData.label: "Battery position:"
             text: "Move battery to right side"
@@ -172,6 +182,20 @@ ScrollView {
         SpinBox {
             id: intervalSpin
             Kirigami.FormData.label: "Update interval (seconds):"
+            from: 1
+            to: 60
+            stepSize: 1
+        }
+
+        CheckBox {
+            id: batModeCheck
+            Kirigami.FormData.label: "Battery mode:"
+            text: "Reduce refresh rate on battery power"
+        }
+
+        SpinBox {
+            id: batModeIntervalSpin
+            Kirigami.FormData.label: "Battery mode interval (seconds):"
             from: 1
             to: 60
             stepSize: 1
@@ -225,52 +249,196 @@ ScrollView {
             Kirigami.FormData.label: "Custom Colors (leave empty for default)"
         }
 
-        TextField {
-            id: cpuColorField
+        RowLayout {
             Kirigami.FormData.label: "CPU color:"
-            placeholderText: "#80D8FF"
+            TextField {
+                id: cpuColorField
+                placeholderText: "#80D8FF"
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                width: 24; height: 24
+                color: cpuColorField.text || cpuColorField.placeholderText
+                border.color: "#888"; border.width: 1; radius: 3
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: cpuColorDialog.open()
+                }
+            }
+            QtDialogs.ColorDialog {
+                id: cpuColorDialog
+                selectedColor: cpuColorField.text || cpuColorField.placeholderText
+                onAccepted: cpuColorField.text = selectedColor
+            }
         }
 
-        TextField {
-            id: gpuColorField
+        RowLayout {
             Kirigami.FormData.label: "GPU color:"
-            placeholderText: "#69F0AE"
+            TextField {
+                id: gpuColorField
+                placeholderText: "#69F0AE"
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                width: 24; height: 24
+                color: gpuColorField.text || gpuColorField.placeholderText
+                border.color: "#888"; border.width: 1; radius: 3
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: gpuColorDialog.open()
+                }
+            }
+            QtDialogs.ColorDialog {
+                id: gpuColorDialog
+                selectedColor: gpuColorField.text || gpuColorField.placeholderText
+                onAccepted: gpuColorField.text = selectedColor
+            }
         }
 
-        TextField {
-            id: ramColorField
+        RowLayout {
             Kirigami.FormData.label: "RAM color:"
-            placeholderText: "#EA80FC"
+            TextField {
+                id: ramColorField
+                placeholderText: "#EA80FC"
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                width: 24; height: 24
+                color: ramColorField.text || ramColorField.placeholderText
+                border.color: "#888"; border.width: 1; radius: 3
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: ramColorDialog.open()
+                }
+            }
+            QtDialogs.ColorDialog {
+                id: ramColorDialog
+                selectedColor: ramColorField.text || ramColorField.placeholderText
+                onAccepted: ramColorField.text = selectedColor
+            }
         }
 
-        TextField {
-            id: netColorField
+        RowLayout {
             Kirigami.FormData.label: "Network color:"
-            placeholderText: "#80DEEA"
+            TextField {
+                id: netColorField
+                placeholderText: "#80DEEA"
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                width: 24; height: 24
+                color: netColorField.text || netColorField.placeholderText
+                border.color: "#888"; border.width: 1; radius: 3
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: netColorDialog.open()
+                }
+            }
+            QtDialogs.ColorDialog {
+                id: netColorDialog
+                selectedColor: netColorField.text || netColorField.placeholderText
+                onAccepted: netColorField.text = selectedColor
+            }
         }
 
-        TextField {
-            id: diskColorField
+        RowLayout {
             Kirigami.FormData.label: "Disk color:"
-            placeholderText: "#FFB74D"
+            TextField {
+                id: diskColorField
+                placeholderText: "#FFB74D"
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                width: 24; height: 24
+                color: diskColorField.text || diskColorField.placeholderText
+                border.color: "#888"; border.width: 1; radius: 3
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: diskColorDialog.open()
+                }
+            }
+            QtDialogs.ColorDialog {
+                id: diskColorDialog
+                selectedColor: diskColorField.text || diskColorField.placeholderText
+                onAccepted: diskColorField.text = selectedColor
+            }
         }
 
-        TextField {
-            id: uptimeColorField
+        RowLayout {
             Kirigami.FormData.label: "Uptime color:"
-            placeholderText: "#ECEFF1"
+            TextField {
+                id: uptimeColorField
+                placeholderText: "#ECEFF1"
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                width: 24; height: 24
+                color: uptimeColorField.text || uptimeColorField.placeholderText
+                border.color: "#888"; border.width: 1; radius: 3
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: uptimeColorDialog.open()
+                }
+            }
+            QtDialogs.ColorDialog {
+                id: uptimeColorDialog
+                selectedColor: uptimeColorField.text || uptimeColorField.placeholderText
+                onAccepted: uptimeColorField.text = selectedColor
+            }
         }
 
-        TextField {
-            id: batColorField
+        RowLayout {
             Kirigami.FormData.label: "Battery color:"
-            placeholderText: "#FFEE58"
+            TextField {
+                id: batColorField
+                placeholderText: "#FFEE58"
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                width: 24; height: 24
+                color: batColorField.text || batColorField.placeholderText
+                border.color: "#888"; border.width: 1; radius: 3
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: batColorDialog.open()
+                }
+            }
+            QtDialogs.ColorDialog {
+                id: batColorDialog
+                selectedColor: batColorField.text || batColorField.placeholderText
+                onAccepted: batColorField.text = selectedColor
+            }
         }
 
-        TextField {
-            id: warnColorField
+        RowLayout {
             Kirigami.FormData.label: "Warning color:"
-            placeholderText: "#FF5252"
+            TextField {
+                id: warnColorField
+                placeholderText: "#FF5252"
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                width: 24; height: 24
+                color: warnColorField.text || warnColorField.placeholderText
+                border.color: "#888"; border.width: 1; radius: 3
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: warnColorDialog.open()
+                }
+            }
+            QtDialogs.ColorDialog {
+                id: warnColorDialog
+                selectedColor: warnColorField.text || warnColorField.placeholderText
+                onAccepted: warnColorField.text = selectedColor
+            }
         }
     }
 }

@@ -20,16 +20,19 @@ Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple
 - **RAM usage** — reads from `/proc/meminfo`, can display as percentage or GB
 - **Network speed** — live download rate with auto-scaling units (B/s, K/s, M/s, G/s)
 - **Battery level** — reads from `/sys/class/power_supply/`, with optional time remaining and `|` separator
-- **CPU/GPU temperature** — via KSystemStats D-Bus, appended to usage (disabled by default)
+- **CPU/GPU temperature** — via hwmon sysfs sensors, displayed in °C (disabled by default)
 - **Disk usage** — root filesystem usage percentage (disabled by default)
 - **System uptime** — formatted as `3d 4h` or `2h 30m` (disabled by default)
 - **Trend arrows** — shows rising/falling indicators on metrics (disabled by default)
+- **Icon mode** — optional Font Awesome icons instead of text labels (disabled by default)
 - **Click to launch** — left-click opens a terminal command (default: `wezterm -e htop`), middle-click opens popup
 - **1-second updates** by default (configurable 1–60s)
+- **Battery mode** — automatically reduces refresh rate when on battery power (default: 5s interval)
+- **Resource-aware** — only runs data collection for enabled metrics
 - **Two color themes** — normal and bright (for dark panels)
 - **Configurable warnings** — adjustable thresholds per metric (default: 90% CPU/GPU/RAM, 15% battery)
 - **Configurable spacing** — adjust space between items (default 3, range 1–10)
-- **Custom colors** — override colors for any metric individually
+- **Custom colors** — override colors for any metric individually, with color picker
 - **Fully configurable** — show/hide each metric, decimal precision, RAM in GB, battery position, separator style, update interval
 
 ## Settings
@@ -39,7 +42,7 @@ Right-click the widget → Configure → General:
 | Setting | Description |
 |---------|-------------|
 | Show CPU/GPU/RAM/Network/Battery | Toggle each metric on/off |
-| CPU/GPU temperature | Show hardware temperatures next to usage |
+| CPU/GPU temperature (°C) | Show hardware temperatures next to usage |
 | Disk usage | Show root filesystem usage |
 | Uptime | Show system uptime |
 | Battery time remaining | Show estimated time to empty/full |
@@ -47,14 +50,17 @@ Right-click the widget → Configure → General:
 | RAM in GB | Show `7.4GB` instead of `23%` |
 | Bright colors | High-contrast colors for dark panel themes |
 | Trend arrows | Show rise/fall indicators on metrics |
+| Icons | Use Font Awesome icons instead of text labels |
 | Warnings | Color change at configurable thresholds |
 | Warning thresholds | Per-metric threshold (CPU, GPU, RAM, battery) |
 | Battery position | Battery on right or left side |
 | Battery separator | Show `\|` divider between battery and other items |
+| Battery mode | Reduce refresh rate when on battery power |
+| Battery mode interval | Refresh interval when on battery (1–60s, default 5) |
 | Item spacing | Space between items (1–10, default 3) |
 | Click command | Command to run on left-click (default: `wezterm -e htop`) |
 | Update interval | Refresh rate from 1 to 60 seconds |
-| Custom colors | Override color for any individual metric |
+| Custom colors | Override color for any metric with text input or color picker |
 
 ## Installation
 
@@ -103,15 +109,22 @@ busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 \
   org.kde.ksystemstats1 allSensors | tr ',' '\n' | grep "gpu.*usage"
 ```
 
+## Temperature Note
+
+Temperatures are read directly from hwmon sysfs sensors (`/sys/class/hwmon/`) in °C. CPU temperature uses the `coretemp` hwmon sensor (Package temp). GPU temperature uses the `thinkpad` hwmon sensor. If your GPU's discrete chip is powered off (common with nouveau), GPU temperature will be hidden automatically.
+
 ## File Structure
 
 ```
 org.jesuscdev.sysmonitor/
   metadata.json                    # Widget identity and Plasma 6 metadata
+  LICENSE-fontawesome.txt          # OFL license for Font Awesome font
   contents/
     config/
       main.xml                     # Configuration schema (all settings)
       config.qml                   # Registers the config page
+    fonts/
+      fa-solid-900.ttf             # Font Awesome 6 Free Solid (optional icons)
     ui/
       main.qml                     # Widget logic, display, and data collection
       configGeneral.qml            # Settings UI for the Configure dialog
@@ -142,3 +155,5 @@ journalctl --user -u plasma-plasmashell -f
 ## License
 
 MIT
+
+Font Awesome 6 Free is licensed under the [SIL Open Font License (OFL)](https://scripts.sil.org/OFL). See `LICENSE-fontawesome.txt`.
