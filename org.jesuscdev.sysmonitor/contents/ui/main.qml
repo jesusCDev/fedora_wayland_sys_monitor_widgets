@@ -460,27 +460,13 @@ PlasmoidItem {
                 var output = (buffers[source] || "").trim()
                 delete buffers[source]
                 disconnectSource(source)
-                // busctl output: a(sv) 1 "gpu/gpu1/usage" i 0
-                // Extract the last field (the value)
                 if (output !== "") {
-                    var parts = output.split(/\s+/)
-                    var val = parseFloat(parts[parts.length - 1])
+                    var val = parseFloat(output)
                     if (!isNaN(val)) {
                         prevGpuDisplay = gpuValue
                         gpuValue = val
                     }
                 }
-            }
-        }
-    }
-
-    PlasmaSupport.DataSource {
-        id: gpuSubscribe
-        engine: "executable"
-        connectedSources: []
-        onNewData: function(source, data) {
-            if (data["exit code"] !== undefined) {
-                disconnectSource(source)
             }
         }
     }
@@ -639,8 +625,7 @@ PlasmoidItem {
             cpuSource.connectSource("head -1 /proc/stat")
         if (showRam)
             ramSource.connectSource("head -3 /proc/meminfo")
-        if (showGpu)
-            gpuSource.connectSource("busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage")
+        gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/usage >/dev/null 2>&1; busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
         if (showBat || batteryModeEnabled)
             batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); cl=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"'")
 
@@ -662,7 +647,6 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
-        gpuSubscribe.connectSource("busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/usage")
         refreshAll()
     }
 }
