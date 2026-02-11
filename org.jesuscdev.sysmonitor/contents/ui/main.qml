@@ -193,99 +193,207 @@ PlasmoidItem {
         return ''
     }
 
-    // Build colored HTML for the panel
-    function panelHtml() {
-        var sep = ''
-        for (var i = 0; i < itemSpacing; i++) sep += '&nbsp;'
+    // ── Click action helpers ────────────────────────────────────
+    function launchApp(cmd) {
+        if (cmd !== "")
+            launchSource.connectSource("sh -c '" + cmd + " &'")
+    }
 
-        var batSep = sep
-        if (showBatSpacer) {
-            var pad = ''
-            for (var j = 0; j < 3; j++) pad += '&nbsp;'
-            batSep = pad + '<span style="color:#888888;">&#x2502;</span>' + pad
-        }
+    function metricClicked(type) {
+        if (type === "cpu" || type === "gpu" || type === "ram" || type === "disk")
+            launchApp(clickCommand)
+        else if (type === "net")
+            launchApp("kcmshell6 kcm_networkmanagement")
+        else if (type === "uptime" || type === "bat")
+            launchApp("kcmshell6 kcm_powerdevilprofilesconfig")
+    }
 
-        // System metrics group
-        var sys = []
-        if (showCpu) {
-            var cpuStr = metricLabel('CPU', 'f2db', cpuHex) + fmt(cpuValue) + '%'
-            if (showCpuTemp && cpuTemp > 0) cpuStr += ' ' + Math.round(cpuTemp) + '°'
-            cpuStr += trendArrow(cpuValue, prevCpuDisplay)
-            sys.push('<b><span style="color:' + cpuHex + ';">' + cpuStr + '</span></b>')
-        }
-        if (showGpu) {
-            var gpuStr = metricLabel('GPU', 'f625', gpuHex) + fmt(gpuValue) + '%'
-            if (showGpuTemp && gpuTemp > 0) gpuStr += ' ' + Math.round(gpuTemp) + '°'
-            gpuStr += trendArrow(gpuValue, prevGpuDisplay)
-            sys.push('<b><span style="color:' + gpuHex + ';">' + gpuStr + '</span></b>')
-        }
-        if (showRam) {
-            var ramStr = metricLabel('RAM', 'f538', ramHex) + fmtRam()
-            ramStr += trendArrow(ramValue, prevRamDisplay)
-            sys.push('<b><span style="color:' + ramHex + ';">' + ramStr + '</span></b>')
-        }
-        if (showNet) {
-            sys.push('<b><span style="color:' + netHex + ';">' + metricLabel('NET', 'f019', netHex) + fmtNetSpeed(netDownBytes) + '</span></b>')
-        }
-        if (showDisk) {
-            sys.push('<b><span style="color:' + diskHex + ';">' + metricLabel('DISK', 'f0a0', diskHex) + fmt(diskValue) + '%</span></b>')
-        }
-        if (showUptime) {
-            sys.push('<b><span style="color:' + uptimeHex + ';">' + metricLabel('UP', 'f017', uptimeHex) + fmtUptime(uptimeSecs) + '</span></b>')
-        }
+    // Helper: are any system metrics visible?
+    property bool hasSysMetrics: showCpu || showGpu || showRam || showNet || showDisk || showUptime
 
-        // Battery
-        var bat = ''
-        if (showBat && batValue >= 0) {
-            var bolt = ''
-            if (showChargingIcon && batCharging) {
-                if (faFont.status === FontLoader.Ready)
-                    bolt = ' <span style="font-family:\'' + faFont.name + '\'; color:#FFFFFF;">&#xf0e7;</span>'
-                else
-                    bolt = ' <span style="color:#FFFFFF;">&#x26A1;</span>'
-            }
-            var batTimeStr = showBatTime ? (' ' + fmtBatTime()) : ''
-            bat = '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', 'f240', batHex) + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
+    // Battery HTML (shared between left and right positions)
+    function batItemHtml() {
+        var bolt = ''
+        if (showChargingIcon && batCharging) {
+            if (faFont.status === FontLoader.Ready)
+                bolt = ' <span style="font-family:\'' + faFont.name + '\'; color:#FFFFFF;">&#xf0e7;</span>'
+            else
+                bolt = ' <span style="color:#FFFFFF;">&#x26A1;</span>'
         }
+        var batTimeStr = showBatTime ? (' ' + fmtBatTime()) : ''
+        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', 'f240', batHex) + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
+    }
 
-        var sysStr = sys.join(sep)
-
-        if (bat === '') return sysStr
-        if (sysStr === '') return bat
-
-        if (batOnRight)
-            return sysStr + batSep + bat
-        else
-            return bat + batSep + sysStr
+    function batSepHtml() {
+        if (showBatSpacer)
+            return '&nbsp;&nbsp;&nbsp;<span style="color:#888888;">&#x2502;</span>&nbsp;&nbsp;&nbsp;'
+        var s = ''
+        for (var i = 0; i < itemSpacing; i++) s += '&nbsp;'
+        return s
     }
 
     // ── Panel view ──────────────────────────────────────────────
     compactRepresentation: Item {
         id: compactRoot
-        Layout.preferredWidth: panelText.implicitWidth + 24
-        Layout.minimumWidth: panelText.implicitWidth + 24
+        Layout.preferredWidth: panelRow.implicitWidth + 24
+        Layout.minimumWidth: panelRow.implicitWidth + 24
 
-        Text {
-            id: panelText
+        Row {
+            id: panelRow
             anchors.centerIn: parent
-            textFormat: Text.RichText
-            text: root.panelHtml()
-            font.pointSize: 10
-            verticalAlignment: Text.AlignVCenter
-        }
+            spacing: 0
 
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-            onClicked: function(mouse) {
-                if (mouse.button === Qt.LeftButton) {
-                    if (root.clickCommand !== "") {
-                        launchSource.connectSource(root.clickCommand)
-                    } else {
-                        root.expanded = !root.expanded
+            // Battery on LEFT + separator
+            Text {
+                visible: root.showBat && root.batValue >= 0 && !root.batOnRight
+                textFormat: Text.RichText
+                font.pointSize: 10
+                verticalAlignment: Text.AlignVCenter
+                text: root.batItemHtml() + (root.hasSysMetrics ? root.batSepHtml() : '')
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: function(mouse) {
+                        if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
+                        else root.expanded = !root.expanded
                     }
-                } else if (mouse.button === Qt.MiddleButton) {
-                    root.expanded = !root.expanded
+                }
+            }
+
+            // System metrics
+            Row {
+                spacing: root.itemSpacing * 4
+
+                Text {
+                    visible: root.showCpu
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: '<b><span style="color:' + root.cpuHex + ';">'
+                        + root.metricLabel('CPU', 'f2db', root.cpuHex) + root.fmt(root.cpuValue) + '%'
+                        + (root.showCpuTemp && root.cpuTemp > 0 ? ' ' + Math.round(root.cpuTemp) + '°' : '')
+                        + root.trendArrow(root.cpuValue, root.prevCpuDisplay) + '</span></b>'
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton) root.metricClicked("cpu")
+                            else root.expanded = !root.expanded
+                        }
+                    }
+                }
+
+                Text {
+                    visible: root.showGpu
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: '<b><span style="color:' + root.gpuHex + ';">'
+                        + root.metricLabel('GPU', 'f625', root.gpuHex) + root.fmt(root.gpuValue) + '%'
+                        + (root.showGpuTemp && root.gpuTemp > 0 ? ' ' + Math.round(root.gpuTemp) + '°' : '')
+                        + root.trendArrow(root.gpuValue, root.prevGpuDisplay) + '</span></b>'
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton) root.metricClicked("gpu")
+                            else root.expanded = !root.expanded
+                        }
+                    }
+                }
+
+                Text {
+                    visible: root.showRam
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: '<b><span style="color:' + root.ramHex + ';">'
+                        + root.metricLabel('RAM', 'f538', root.ramHex) + root.fmtRam()
+                        + root.trendArrow(root.ramValue, root.prevRamDisplay) + '</span></b>'
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton) root.metricClicked("ram")
+                            else root.expanded = !root.expanded
+                        }
+                    }
+                }
+
+                Text {
+                    visible: root.showNet
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: '<b><span style="color:' + root.netHex + ';">'
+                        + root.metricLabel('NET', 'f019', root.netHex) + root.fmtNetSpeed(root.netDownBytes) + '</span></b>'
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton) root.metricClicked("net")
+                            else root.expanded = !root.expanded
+                        }
+                    }
+                }
+
+                Text {
+                    visible: root.showDisk
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: '<b><span style="color:' + root.diskHex + ';">'
+                        + root.metricLabel('DISK', 'f0a0', root.diskHex) + root.fmt(root.diskValue) + '%</span></b>'
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton) root.metricClicked("disk")
+                            else root.expanded = !root.expanded
+                        }
+                    }
+                }
+
+                Text {
+                    visible: root.showUptime
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: '<b><span style="color:' + root.uptimeHex + ';">'
+                        + root.metricLabel('UP', 'f017', root.uptimeHex) + root.fmtUptime(root.uptimeSecs) + '</span></b>'
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton) root.metricClicked("uptime")
+                            else root.expanded = !root.expanded
+                        }
+                    }
+                }
+            }
+
+            // Separator + Battery on RIGHT
+            Text {
+                visible: root.showBat && root.batValue >= 0 && root.batOnRight
+                textFormat: Text.RichText
+                font.pointSize: 10
+                verticalAlignment: Text.AlignVCenter
+                text: (root.hasSysMetrics ? root.batSepHtml() : '') + root.batItemHtml()
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: function(mouse) {
+                        if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
+                        else root.expanded = !root.expanded
+                    }
                 }
             }
         }
