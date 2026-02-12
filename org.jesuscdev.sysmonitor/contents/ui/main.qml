@@ -5,6 +5,7 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.plasma5support 2.0 as PlasmaSupport
 import org.kde.plasma.components 3.0 as PlasmaComponents
+import org.kde.ksysguard.sensors 1.0 as Sensors
 
 PlasmoidItem {
     id: root
@@ -148,15 +149,36 @@ PlasmoidItem {
         return useDecimals ? val.toFixed(1) : Math.round(val).toString()
     }
 
+    // Right-pad percentage to fixed width (widest: "100%" or "100.0%")
+    function fmtPct(val) {
+        var str = fmt(val)
+        var maxLen = useDecimals ? 5 : 3  // "100.0" or "100"
+        var pad = maxLen - str.length
+        var result = str + '%'
+        for (var i = 0; i < pad; i++) result += '&nbsp;'
+        return result
+    }
+
     function fmtRam() {
-        if (ramShowGB) return ramUsedGB.toFixed(1) + 'GB'
-        return fmt(ramValue) + '%'
+        if (ramShowGB) {
+            var str = ramUsedGB.toFixed(1) + 'GB'
+            // Pad to 6 rendered chars (widest: "99.9GB")
+            var pad = 6 - str.length
+            for (var i = 0; i < pad; i++) str += '&nbsp;'
+            return str
+        }
+        return fmtPct(ramValue)
     }
 
     function fmtNetSpeed(bytesPerSec) {
-        if (bytesPerSec >= 1073741824) return (bytesPerSec / 1073741824).toFixed(1) + 'G/s'
-        if (bytesPerSec >= 1048576) return (bytesPerSec / 1048576).toFixed(1) + 'M/s'
-        return (bytesPerSec / 1024).toFixed(0) + 'K/s'
+        var str
+        if (bytesPerSec >= 1073741824) str = (bytesPerSec / 1073741824).toFixed(1) + 'G/s'
+        else if (bytesPerSec >= 1048576) str = (bytesPerSec / 1048576).toFixed(1) + 'M/s'
+        else str = (bytesPerSec / 1024).toFixed(0) + 'K/s'
+        // Right-pad to 8 rendered chars (widest M/s: "999.9M/s") so bar width stays stable
+        var pad = 8 - str.length
+        for (var i = 0; i < pad; i++) str += '&nbsp;'
+        return str
     }
 
     function fmtUptime(secs) {
@@ -165,7 +187,7 @@ PlasmoidItem {
         var m = Math.floor((secs % 3600) / 60)
         if (d > 0) return d + 'd ' + h + 'h'
         if (h > 0) return h + 'h ' + m + 'm'
-        return m + 'm'
+        return m + 'm&nbsp;'
     }
 
     function fmtBatTime() {
@@ -292,7 +314,7 @@ PlasmoidItem {
                     font.pointSize: 10
                     verticalAlignment: Text.AlignVCenter
                     text: '<b><span style="color:' + root.cpuHex + ';">'
-                        + root.metricLabel('CPU', 'f2db', root.cpuHex) + root.fmt(root.cpuValue) + '%'
+                        + root.metricLabel('CPU', 'f2db', root.cpuHex) + root.fmtPct(root.cpuValue)
                         + (root.showCpuTemp && root.cpuTemp > 0 ? ' ' + Math.round(root.cpuTemp) + '°' : '')
                         + root.trendArrow(root.cpuValue, root.prevCpuDisplay) + '</span></b>'
                     MouseArea {
@@ -312,7 +334,7 @@ PlasmoidItem {
                     font.pointSize: 10
                     verticalAlignment: Text.AlignVCenter
                     text: '<b><span style="color:' + root.gpuHex + ';">'
-                        + root.metricLabel('GPU', 'f625', root.gpuHex) + root.fmt(root.gpuValue) + '%'
+                        + root.metricLabel('GPU', 'f625', root.gpuHex) + root.fmtPct(root.gpuValue)
                         + (root.showGpuTemp && root.gpuTemp > 0 ? ' ' + Math.round(root.gpuTemp) + '°' : '')
                         + root.trendArrow(root.gpuValue, root.prevGpuDisplay) + '</span></b>'
                     MouseArea {
@@ -346,31 +368,12 @@ PlasmoidItem {
                 }
 
                 Text {
-                    visible: root.showNet
-                    textFormat: Text.RichText
-                    font.pointSize: 10
-                    verticalAlignment: Text.AlignVCenter
-                    text: '<b><span style="color:' + root.netHex + ';">'
-                        + root.metricLabel('NET', root.netConnected ? 'f019' : 'f071', root.netHex)
-                        + (root.netConnected ? root.fmtNetSpeed(root.netDownBytes) : 'OFF') + '</span></b>'
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton) root.metricClicked("net")
-                            else root.expanded = !root.expanded
-                        }
-                    }
-                }
-
-                Text {
                     visible: root.showDisk
                     textFormat: Text.RichText
                     font.pointSize: 10
                     verticalAlignment: Text.AlignVCenter
                     text: '<b><span style="color:' + root.diskHex + ';">'
-                        + root.metricLabel('DISK', 'f0a0', root.diskHex) + root.fmt(root.diskValue) + '%</span></b>'
+                        + root.metricLabel('DISK', 'f0a0', root.diskHex) + root.fmtPct(root.diskValue) + '</span></b>'
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
@@ -395,6 +398,25 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("uptime")
+                            else root.expanded = !root.expanded
+                        }
+                    }
+                }
+
+                Text {
+                    visible: root.showNet
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: '<b><span style="color:' + root.netHex + ';">'
+                        + root.metricLabel('NET', root.netConnected ? 'f019' : 'f071', root.netHex)
+                        + (root.netConnected ? root.fmtNetSpeed(root.netDownBytes) : 'OFF') + '</span></b>'
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton) root.metricClicked("net")
                             else root.expanded = !root.expanded
                         }
                     }
@@ -578,37 +600,16 @@ PlasmoidItem {
         }
     }
 
-    // ── GPU data source ─────────────────────────────────────────
-    PlasmaSupport.DataSource {
-        id: gpuSource
-        engine: "executable"
-        connectedSources: []
-        property var buffers: ({})
-        onNewData: function(source, data) {
-            var chunk = data["stdout"] || ""
-            buffers[source] = (buffers[source] || "") + chunk
-            if (data["exit code"] !== undefined) {
-                var output = (buffers[source] || "").trim()
-                delete buffers[source]
-                disconnectSource(source)
-                if (output !== "") {
-                    var val = parseFloat(output)
-                    if (!isNaN(val)) {
-                        prevGpuDisplay = gpuValue
-                        gpuValue = val
-                    }
-                }
-            }
-        }
-    }
-
-    PlasmaSupport.DataSource {
-        id: gpuSubscribe
-        engine: "executable"
-        connectedSources: []
-        onNewData: function(source, data) {
-            if (data["exit code"] !== undefined) {
-                disconnectSource(source)
+    // ── GPU sensor (native KSystemStats binding) ───────────────
+    Sensors.Sensor {
+        id: gpuSensor
+        sensorId: "gpu/gpu1/usage"
+        enabled: true
+        onValueChanged: {
+            var val = parseFloat(value)
+            if (!isNaN(val)) {
+                prevGpuDisplay = gpuValue
+                gpuValue = val
             }
         }
     }
@@ -769,7 +770,6 @@ PlasmoidItem {
             cpuSource.connectSource("head -1 /proc/stat")
         if (showRam)
             ramSource.connectSource("head -3 /proc/meminfo")
-        gpuSource.connectSource("sh -c 'busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 sensorData as 1 gpu/gpu1/usage 2>/dev/null | awk \"{print \\$NF}\"'")
         if (showBat || batteryModeEnabled)
             batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); cl=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"'")
 
@@ -791,7 +791,6 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
-        gpuSubscribe.connectSource("busctl --user call org.kde.ksystemstats1 /org/kde/ksystemstats1 org.kde.ksystemstats1 subscribe as 1 gpu/gpu1/usage")
         refreshAll()
     }
 }

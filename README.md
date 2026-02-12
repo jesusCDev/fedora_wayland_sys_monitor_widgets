@@ -14,9 +14,9 @@ Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple
 ## Features
 
 - **CPU usage** — reads from `/proc/stat` with delta calculation
-- **GPU usage** — queries KDE's KSystemStats via D-Bus (works with any driver: nouveau, i915, amdgpu, nvidia)
+- **GPU usage** — uses native KSystemStats QML sensor bindings (works with any driver: nouveau, i915, amdgpu, nvidia)
 - **RAM usage** — reads from `/proc/meminfo`, can display as percentage or GB
-- **Network speed** — live download rate with auto-scaling units (K/s, M/s, G/s), turns red when disconnected
+- **Network speed** — live download rate with auto-scaling units (K/s, M/s, G/s), turns red when disconnected, positioned last to absorb width changes
 - **Battery level** — reads from `/sys/class/power_supply/`, with optional time remaining and `│` separator
 - **Charge limit aware** — battery time-to-full respects `charge_control_end_threshold` (e.g. 80% charge protection)
 - **CPU/GPU temperature** — via hwmon sysfs sensors, displayed in °C (disabled by default)
@@ -105,7 +105,7 @@ You can add multiple instances with different settings to arrange metrics howeve
 
 ## GPU Note
 
-The widget uses KDE's **KSystemStats** D-Bus service for GPU data, so it works with any GPU driver (nouveau, i915, amdgpu, proprietary nvidia). By default it reads `gpu/gpu1/usage`. If your GPU is on a different index, you may need to edit `main.qml` and change `gpu/gpu1/usage` to match your system.
+The widget uses KDE's native **KSystemStats QML sensor bindings** (`org.kde.ksysguard.sensors`) for GPU data. This is the same API used by Plasma's built-in system monitor widgets, so it works reliably with any GPU driver (nouveau, i915, amdgpu, proprietary nvidia) without needing to shell out to `busctl`. By default it reads `gpu/gpu1/usage`. If your GPU is on a different index, you may need to edit `main.qml` and change `gpu/gpu1/usage` to match your system.
 
 To check available GPU sensors:
 
@@ -143,7 +143,7 @@ org.jesuscdev.sysmonitor/
 - KDE Plasma 6.0+
 - Qt 6 / Qt Quick 2.15
 - `org.kde.plasma.plasma5support` QML module (included with Plasma 6)
-- `busctl` (included with systemd)
+- `org.kde.ksysguard.sensors` QML module (included with Plasma 6, provides GPU data)
 
 ## Troubleshooting
 
