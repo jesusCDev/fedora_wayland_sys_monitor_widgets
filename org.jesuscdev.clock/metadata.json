@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "jesuscdev"
+            }
+        ],
+        "Category": "Date and Time",
+        "Description": "Inline clock with per-component colors",
+        "Icon": "preferences-system-time",
+        "Id": "org.jesuscdev.clock",
+        "Name": "Clock Inline",
+        "Version": "1.0.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
