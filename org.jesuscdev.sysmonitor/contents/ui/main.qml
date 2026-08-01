@@ -91,6 +91,18 @@ PlasmoidItem {
     property double ccFetchedAt: 0       // epoch ms
     property bool ccRunning: false
 
+    // Which section the popup shows: "sys" (middle-click on metrics) or "claude" (click Claude segment)
+    property string popupMode: "sys"
+
+    function togglePopup(mode) {
+        if (expanded && popupMode === mode) {
+            expanded = false
+        } else {
+            popupMode = mode
+            expanded = true
+        }
+    }
+
     // Warning thresholds
     property int cpuWarnThreshold: Plasmoid.configuration.cpuWarnThreshold
     property int gpuWarnThreshold: Plasmoid.configuration.gpuWarnThreshold
@@ -394,7 +406,7 @@ PlasmoidItem {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
-                        else root.expanded = !root.expanded
+                        else root.togglePopup("sys")
                     }
                 }
             }
@@ -418,7 +430,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("cpu")
-                            else root.expanded = !root.expanded
+                            else root.togglePopup("sys")
                         }
                     }
                 }
@@ -438,7 +450,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("gpu")
-                            else root.expanded = !root.expanded
+                            else root.togglePopup("sys")
                         }
                     }
                 }
@@ -457,7 +469,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("ram")
-                            else root.expanded = !root.expanded
+                            else root.togglePopup("sys")
                         }
                     }
                 }
@@ -475,7 +487,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("disk")
-                            else root.expanded = !root.expanded
+                            else root.togglePopup("sys")
                         }
                     }
                 }
@@ -493,7 +505,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("uptime")
-                            else root.expanded = !root.expanded
+                            else root.togglePopup("sys")
                         }
                     }
                 }
@@ -512,7 +524,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("net")
-                            else root.expanded = !root.expanded
+                            else root.togglePopup("sys")
                         }
                     }
                 }
@@ -527,7 +539,7 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.expanded = !root.expanded
+                        onClicked: root.togglePopup("claude")
                     }
                 }
             }
@@ -545,7 +557,7 @@ PlasmoidItem {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
-                        else root.expanded = !root.expanded
+                        else root.togglePopup("sys")
                     }
                 }
             }
@@ -567,45 +579,46 @@ PlasmoidItem {
             spacing: 10
 
             Text {
+                visible: root.popupMode === "sys"
                 textFormat: Text.RichText
                 text: '<b style="font-size:14pt;">System Monitor</b>'
                 color: "#FFFFFF"
             }
             Text {
-                visible: root.showCpu
+                visible: root.popupMode === "sys" && root.showCpu
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.cpuHex + '; font-size:12pt;"><b>CPU:  ' + root.fmt(root.cpuValue) + '%'
                     + (root.showCpuTemp && root.cpuTemp > 0 ? '  ' + Math.round(root.cpuTemp) + '°C' : '') + '</b></span>'
             }
             Text {
-                visible: root.showGpu
+                visible: root.popupMode === "sys" && root.showGpu
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.gpuHex + '; font-size:12pt;"><b>GPU:  ' + root.fmt(root.gpuValue) + '%'
                     + (root.showGpuTemp && root.gpuTemp > 0 ? '  ' + Math.round(root.gpuTemp) + '°C' : '') + '</b></span>'
             }
             Text {
-                visible: root.showRam
+                visible: root.popupMode === "sys" && root.showRam
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.ramHex + '; font-size:12pt;"><b>RAM:  ' + root.fmtRam() + '</b></span>'
             }
             Text {
-                visible: root.showNet
+                visible: root.popupMode === "sys" && root.showNet
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.netHex + '; font-size:12pt;"><b>NET:  '
                     + (root.netConnected ? root.fmtNetSpeed(root.netDownBytes) : 'Disconnected') + '</b></span>'
             }
             Text {
-                visible: root.showDisk
+                visible: root.popupMode === "sys" && root.showDisk
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.diskHex + '; font-size:12pt;"><b>DISK:  ' + root.fmt(root.diskValue) + '%</b></span>'
             }
             Text {
-                visible: root.showUptime
+                visible: root.popupMode === "sys" && root.showUptime
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.uptimeHex + '; font-size:12pt;"><b>UP:  ' + root.fmtUptime(root.uptimeSecs) + '</b></span>'
             }
             Text {
-                visible: root.showBat && root.batValue >= 0
+                visible: root.popupMode === "sys" && root.showBat && root.batValue >= 0
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%'
                     + (root.showBatTime ? '  ' + root.fmtBatTime() : '') + '</b></span>'
@@ -613,14 +626,8 @@ PlasmoidItem {
             }
 
             // ── Claude usage section ──
-            Rectangle {
-                visible: root.showClaude
-                Layout.fillWidth: true
-                height: 1
-                color: "#44888888"
-            }
             Text {
-                visible: root.showClaude
+                visible: root.popupMode === "claude"
                 textFormat: Text.RichText
                 text: root.claudeIconHtml()
                     + '<b style="font-size:12pt; color:' + root.claudeIconHex + ';">Claude</b>'
@@ -628,12 +635,12 @@ PlasmoidItem {
                         + (root.claudeTier ? ' (' + root.claudeTier + ')' : '') + '</span>' : '')
             }
             Text {
-                visible: root.showClaude && root.claudeStale
+                visible: root.popupMode === "claude" && root.claudeStale
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.claudeWarnHex + ';">&#x26A0; cached data — ' + root.claudeError + '</span>'
             }
             Repeater {
-                model: root.showClaude ? root.claudeLimits : []
+                model: root.popupMode === "claude" ? root.claudeLimits : []
                 Text {
                     textFormat: Text.RichText
                     text: '<span style="font-size:12pt;"><span style="color:#FFFFFF;">' + root.claudeLimitLabel(modelData) + ':  </span>'
@@ -642,7 +649,7 @@ PlasmoidItem {
                 }
             }
             Text {
-                visible: root.showClaude && root.ccusageEnabled
+                visible: root.popupMode === "claude" && root.ccusageEnabled
                 textFormat: Text.RichText
                 text: {
                     var t = root.ccToday()
@@ -959,8 +966,8 @@ PlasmoidItem {
         claudePlan = obj.plan || ""
         claudeTier = obj.tier || ""
         claudeFetchedAt = obj.fetched_at || (Date.now() / 1000)
-        claudeStale = false
-        claudeError = ""
+        claudeStale = obj.stale === true
+        claudeError = claudeStale ? (obj.error || "") : ""
     }
 
     PlasmaSupport.DataSource {
