@@ -127,5 +127,29 @@
         <entry name="warnColor" type="String">
             <default></default>
         </entry>
+        <entry name="showClaude" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="claudeIntervalSec" type="Int">
+            <default>60</default>
+            <min>30</min>
+            <max>600</max>
+        </entry>
+        <entry name="claudeWarnThreshold" type="Int">
+            <default>60</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
+        <entry name="claudeCritThreshold" type="Int">
+            <default>85</default>
+            <min>0</min>
+            <max>100</max>
+        </entry>
+        <entry name="ccusageEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="ccusagePath" type="String">
+            <default>/home/jesuscdev/.nvm/versions/node/v22.21.1/bin/node /home/jesuscdev/.npm/_npx/b8bc0fb451ae8722/node_modules/.bin/ccusage</default>
+        </entry>
     </group>
 </kcfg>

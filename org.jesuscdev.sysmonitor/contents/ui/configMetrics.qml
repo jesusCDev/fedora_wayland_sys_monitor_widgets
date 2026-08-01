@@ -16,6 +16,12 @@ ScrollView {
     property alias cfg_showUptime: uptimeCheck.checked
     property alias cfg_showBat: batCheck.checked
     property alias cfg_showBatTime: batTimeCheck.checked
+    property alias cfg_showClaude: claudeCheck.checked
+    property alias cfg_claudeIntervalSec: claudeIntervalSpin.value
+    property alias cfg_claudeWarnThreshold: claudeWarnSpin.value
+    property alias cfg_claudeCritThreshold: claudeCritSpin.value
+    property alias cfg_ccusageEnabled: ccusageCheck.checked
+    property alias cfg_ccusagePath: ccusagePathField.text
 
     Kirigami.FormLayout {
         width: root.availableWidth
@@ -83,6 +89,50 @@ ScrollView {
             id: batTimeCheck
             Kirigami.FormData.label: "Battery time:"
             text: "Show estimated time remaining"
+        }
+
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Claude Usage"
+        }
+
+        CheckBox {
+            id: claudeCheck
+            Kirigami.FormData.label: "Claude:"
+            text: "Show Claude usage limits"
+        }
+
+        SpinBox {
+            id: claudeIntervalSpin
+            Kirigami.FormData.label: "Refresh (seconds):"
+            from: 30
+            to: 600
+        }
+
+        SpinBox {
+            id: claudeWarnSpin
+            Kirigami.FormData.label: "Amber at (%):"
+            from: 0
+            to: 100
+        }
+
+        SpinBox {
+            id: claudeCritSpin
+            Kirigami.FormData.label: "Red at (%):"
+            from: 0
+            to: 100
+        }
+
+        CheckBox {
+            id: ccusageCheck
+            Kirigami.FormData.label: "Cost stats:"
+            text: "Show token/cost stats in popup (ccusage)"
+        }
+
+        TextField {
+            id: ccusagePathField
+            Kirigami.FormData.label: "ccusage command:"
+            Layout.fillWidth: true
         }
     }
 }

@@ -72,6 +72,25 @@ PlasmoidItem {
     property bool batteryModeEnabled: Plasmoid.configuration.batteryModeEnabled
     property int batteryModeInterval: Plasmoid.configuration.batteryModeInterval
 
+    // Claude usage settings
+    property bool showClaude: Plasmoid.configuration.showClaude
+    property int claudeIntervalSec: Plasmoid.configuration.claudeIntervalSec
+    property int claudeWarnThreshold: Plasmoid.configuration.claudeWarnThreshold
+    property int claudeCritThreshold: Plasmoid.configuration.claudeCritThreshold
+    property bool ccusageEnabled: Plasmoid.configuration.ccusageEnabled
+    property string ccusagePath: Plasmoid.configuration.ccusagePath
+
+    // Claude usage state
+    property var claudeLimits: []
+    property string claudePlan: ""
+    property string claudeTier: ""
+    property bool claudeStale: false
+    property string claudeError: ""
+    property double claudeFetchedAt: 0   // epoch seconds
+    property var ccDaily: []
+    property double ccFetchedAt: 0       // epoch ms
+    property bool ccRunning: false
+
     // Warning thresholds
     property int cpuWarnThreshold: Plasmoid.configuration.cpuWarnThreshold
     property int gpuWarnThreshold: Plasmoid.configuration.gpuWarnThreshold
@@ -132,6 +151,82 @@ PlasmoidItem {
         ? warnHex : (diskColorOverride !== "" ? diskColorOverride : (brightColors ? diskHexBright : diskHexNormal))
     property string uptimeHex: uptimeColorOverride !== ""
         ? uptimeColorOverride : (brightColors ? uptimeHexBright : uptimeHexNormal)
+
+    // ── Claude usage colors (pastel) + helpers ──────────────────
+    readonly property string claudeIconHex: "#D97757"    // Claude orange
+    readonly property string claudeOkHex: "#A5D6A7"      // pastel green
+    readonly property string claudeWarnHex: "#FFE082"    // pastel amber
+    readonly property string claudeCritHex: "#EF9A9A"    // pastel red
+    readonly property string claudeResetHex: "#90CAF9"   // pastel blue — time-left, distinct from usage %
+    readonly property string claudeDimHex: "#8A8A8A"
+
+    function claudePctColor(p) {
+        if (claudeStale) return claudeDimHex
+        if (p >= claudeCritThreshold) return claudeCritHex
+        if (p >= claudeWarnThreshold) return claudeWarnHex
+        return claudeOkHex
+    }
+
+    function claudeLimitByKind(kind) {
+        for (var i = 0; i < claudeLimits.length; i++)
+            if (claudeLimits[i].kind === kind) return claudeLimits[i]
+        return null
+    }
+
+    function claudeLimitLabel(l) {
+        if (l.kind === "session") return "Session (5h)"
+        if (l.kind === "weekly_all") return "Weekly (all)"
+        if (l.kind === "weekly_scoped")
+            return "Weekly " + ((l.scope && l.scope.model && l.scope.model.display_name) || "model")
+        return l.kind
+    }
+
+    function claudeFmtReset(iso) {
+        if (!iso) return ""
+        var ms = new Date(iso).getTime() - Date.now()
+        if (isNaN(ms) || ms <= 0) return "soon"
+        var m = Math.floor(ms / 60000)
+        var d = Math.floor(m / 1440)
+        var h = Math.floor((m % 1440) / 60)
+        if (d > 0) return d + "d " + h + "h"
+        if (h > 0) return h + "h " + (m % 60) + "m"
+        return (m % 60) + "m"
+    }
+
+    function claudeIconHtml() {
+        if (useIcons && faFont.status === FontLoader.Ready)
+            return faIcon('f069', claudeIconHex)
+        return '<span style="color:' + claudeIconHex + ';">&#x273B;</span> '
+    }
+
+    function claudeItemHtml() {
+        var s = claudeLimitByKind("session")
+        var w = claudeLimitByKind("weekly_all")
+        var parts = []
+        if (s) parts.push('<span style="color:' + claudeDimHex + ';">5h </span>'
+            + '<span style="color:' + claudePctColor(s.percent) + ';">' + fmtPct(s.percent) + '</span>')
+        if (w) parts.push('<span style="color:' + claudeDimHex + ';">7d </span>'
+            + '<span style="color:' + claudePctColor(w.percent) + ';">' + fmtPct(w.percent) + '</span>')
+        var body = parts.length ? parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>')
+                                : '<span style="color:' + claudeDimHex + ';">…</span>'
+        var mark = claudeStale ? ' <span style="color:' + claudeDimHex + ';">&#x2717;</span>' : ''
+        return '<b>' + claudeIconHtml() + body + mark + '</b>'
+    }
+
+    function ccToday() {
+        return ccDaily.length ? ccDaily[ccDaily.length - 1] : null
+    }
+    function ccWeekCost() {
+        var sum = 0
+        for (var i = 0; i < ccDaily.length; i++) sum += (ccDaily[i].totalCost || 0)
+        return sum
+    }
+    function fmtTokens(n) {
+        if (n >= 1e9) return (n / 1e9).toFixed(1) + "B"
+        if (n >= 1e6) return (n / 1e6).toFixed(1) + "M"
+        if (n >= 1e3) return (n / 1e3).toFixed(1) + "K"
+        return "" + Math.round(n)
+    }
 
     // ── Font Awesome icon helpers ─────────────────────────────────
     function faIcon(unicode, color) {
@@ -421,6 +516,20 @@ PlasmoidItem {
                         }
                     }
                 }
+
+                Text {
+                    visible: root.showClaude
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: root.claudeItemHtml()
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.expanded = !root.expanded
+                    }
+                }
             }
 
             // Separator + Battery on RIGHT
@@ -460,7 +569,7 @@ PlasmoidItem {
             Text {
                 textFormat: Text.RichText
                 text: '<b style="font-size:14pt;">System Monitor</b>'
-                color: PlasmaCore.Theme.textColor
+                color: "#FFFFFF"
             }
             Text {
                 visible: root.showCpu
@@ -501,6 +610,51 @@ PlasmoidItem {
                 text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%'
                     + (root.showBatTime ? '  ' + root.fmtBatTime() : '') + '</b></span>'
                     + ((root.showChargingIcon && root.batCharging) ? ' <span style="font-family:\'' + faFont.name + '\'; color:#FFFFFF; font-size:12pt;">&#xf0e7;</span>' : '')
+            }
+
+            // ── Claude usage section ──
+            Rectangle {
+                visible: root.showClaude
+                Layout.fillWidth: true
+                height: 1
+                color: "#44888888"
+            }
+            Text {
+                visible: root.showClaude
+                textFormat: Text.RichText
+                text: root.claudeIconHtml()
+                    + '<b style="font-size:12pt; color:' + root.claudeIconHex + ';">Claude</b>'
+                    + (root.claudePlan ? ' <span style="color:' + root.claudeDimHex + ';">' + root.claudePlan
+                        + (root.claudeTier ? ' (' + root.claudeTier + ')' : '') + '</span>' : '')
+            }
+            Text {
+                visible: root.showClaude && root.claudeStale
+                textFormat: Text.RichText
+                text: '<span style="color:' + root.claudeWarnHex + ';">&#x26A0; cached data — ' + root.claudeError + '</span>'
+            }
+            Repeater {
+                model: root.showClaude ? root.claudeLimits : []
+                Text {
+                    textFormat: Text.RichText
+                    text: '<span style="font-size:12pt;"><span style="color:#FFFFFF;">' + root.claudeLimitLabel(modelData) + ':  </span>'
+                        + '<b><span style="color:' + root.claudePctColor(modelData.percent) + ';">' + Math.round(modelData.percent) + '%</span></b>'
+                        + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.claudeFmtReset(modelData.resets_at) + '</span></span>'
+                }
+            }
+            Text {
+                visible: root.showClaude && root.ccusageEnabled
+                textFormat: Text.RichText
+                text: {
+                    var t = root.ccToday()
+                    if (!t) return '<span style="color:' + root.claudeDimHex + ';">' + (root.ccRunning ? 'Loading local stats…' : 'No local stats') + '</span>'
+                    var lines = '<span style="color:#FFFFFF;"><b>Today:</b> $' + (t.totalCost || 0).toFixed(2)
+                        + ' &#183; ' + root.fmtTokens(t.totalTokens || 0) + ' tokens'
+                        + '<br><b>Last 7 days:</b> $' + root.ccWeekCost().toFixed(2) + '</span>'
+                    var mb = t.modelBreakdowns || []
+                    for (var i = 0; i < mb.length; i++)
+                        lines += '<br><span style="color:' + root.claudeDimHex + ';">&nbsp;&nbsp;' + mb[i].modelName + ': $' + (mb[i].cost || 0).toFixed(2) + '</span>'
+                    return lines
+                }
             }
         }
     }
@@ -756,6 +910,111 @@ PlasmoidItem {
         }
     }
 
+    // ── Claude usage data sources ───────────────────────────────
+    readonly property string claudeScriptPath: {
+        var p = Qt.resolvedUrl("../scripts/fetch-usage.sh").toString()
+        return p.replace(/^file:\/\//, "")
+    }
+
+    PlasmaSupport.DataSource {
+        id: claudeSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "").trim()
+                delete buffers[source]
+                disconnectSource(source)
+                parseClaudeUsage(output)
+            }
+        }
+    }
+
+    function parseClaudeUsage(output) {
+        var obj
+        try { obj = JSON.parse(output) } catch (e) {
+            claudeStale = true; claudeError = "bad output"; return
+        }
+        if (!obj.ok) {
+            claudeStale = true
+            claudeError = obj.error || "unknown"
+            return
+        }
+        var u = obj.usage || {}
+        var newLimits = []
+        if (u.limits && u.limits.length) {
+            for (var i = 0; i < u.limits.length; i++) {
+                var l = u.limits[i]
+                if (l.kind === "session" || l.kind === "weekly_all" || l.kind === "weekly_scoped")
+                    newLimits.push(l)
+            }
+        } else {
+            if (u.five_hour) newLimits.push({kind: "session", percent: u.five_hour.utilization, resets_at: u.five_hour.resets_at})
+            if (u.seven_day) newLimits.push({kind: "weekly_all", percent: u.seven_day.utilization, resets_at: u.seven_day.resets_at})
+        }
+        claudeLimits = newLimits
+        claudePlan = obj.plan || ""
+        claudeTier = obj.tier || ""
+        claudeFetchedAt = obj.fetched_at || (Date.now() / 1000)
+        claudeStale = false
+        claudeError = ""
+    }
+
+    PlasmaSupport.DataSource {
+        id: ccusageSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "").trim()
+                delete buffers[source]
+                disconnectSource(source)
+                root.ccRunning = false
+                try {
+                    var obj = JSON.parse(output)
+                    root.ccDaily = obj.daily || []
+                    root.ccFetchedAt = Date.now()
+                } catch (e) { /* keep old data */ }
+            }
+        }
+    }
+
+    function refreshClaude() {
+        if (showClaude)
+            claudeSource.connectSource("bash " + claudeScriptPath)
+    }
+
+    function refreshCcusage() {
+        if (!showClaude || !ccusageEnabled || ccRunning) return
+        if (Date.now() - ccFetchedAt < 30 * 60 * 1000) return
+        var d = new Date(Date.now() - 6 * 86400000)
+        var since = "" + d.getFullYear()
+            + ("0" + (d.getMonth() + 1)).slice(-2)
+            + ("0" + d.getDate()).slice(-2)
+        ccRunning = true
+        ccusageSource.connectSource(ccusagePath + " daily --json --since " + since)
+    }
+
+    onExpandedChanged: {
+        if (root.expanded) {
+            refreshClaude()
+            refreshCcusage()
+        }
+    }
+
+    Timer {
+        interval: root.claudeIntervalSec * 1000
+        running: root.showClaude
+        repeat: true
+        onTriggered: root.refreshClaude()
+    }
+
     // ── Timer (interval driven by config + battery mode) ─────────
     Timer {
         id: updateTimer
@@ -792,5 +1051,6 @@ PlasmoidItem {
 
     Component.onCompleted: {
         refreshAll()
+        refreshClaude()
     }
 }
