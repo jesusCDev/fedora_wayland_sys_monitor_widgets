@@ -15,6 +15,20 @@ PlasmoidItem {
     // desktop id (string) -> true when at least one window lives there
     property var occupied: ({})
 
+    // "grid" = open KWin Grid View (4-finger swipe up); "switch" = jump to clicked desktop
+    property string clickAction: Plasmoid.configuration.clickAction
+
+    function openGridView() {
+        switchSource.connectSource("qdbus org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut 'Grid View'")
+    }
+
+    function cellClicked(index) {
+        if (clickAction === "switch")
+            switchSource.connectSource("qdbus org.kde.KWin /KWin setCurrentDesktop " + (index + 1))
+        else
+            openGridView()
+    }
+
     TaskManager.VirtualDesktopInfo {
         id: vdInfo
     }
@@ -60,6 +74,12 @@ PlasmoidItem {
         Layout.preferredWidth: grid.implicitWidth + 14
         Layout.minimumWidth: grid.implicitWidth + 14
 
+        MouseArea {  // gaps between cells
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.openGridView()
+        }
+
         GridLayout {
             id: grid
             anchors.centerIn: parent
@@ -84,7 +104,7 @@ PlasmoidItem {
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: switchSource.connectSource("qdbus org.kde.KWin /KWin setCurrentDesktop " + (index + 1))
+                        onClicked: root.cellClicked(index)
                     }
                 }
             }
