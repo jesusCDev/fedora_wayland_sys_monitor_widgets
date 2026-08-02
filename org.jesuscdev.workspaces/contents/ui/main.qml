@@ -76,10 +76,10 @@ PlasmoidItem {
 
                     width: 15
                     height: 7
-                    radius: 2
-                    color: isOccupied ? colHex : "transparent"
-                    border.width: isCurrent ? 2 : 1
-                    border.color: isCurrent ? root.currentHex : Qt.alpha(colHex, isOccupied ? 1.0 : 0.4)
+                    radius: 0
+                    color: isCurrent ? root.currentHex : (isOccupied ? colHex : "transparent")
+                    border.width: isCurrent ? 0 : 1
+                    border.color: Qt.alpha(colHex, isOccupied ? 1.0 : 0.4)
 
                     MouseArea {
                         anchors.fill: parent
