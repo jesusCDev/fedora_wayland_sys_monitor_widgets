@@ -11,6 +11,23 @@ PlasmoidItem {
     id: root
     preferredRepresentation: Plasmoid.compactRepresentation
 
+    // Hover tooltip: live summary instead of the useless title/description
+    toolTipMainText: ""
+    toolTipSubText: {
+        var lines = []
+        var s = claudeLimitByKind("session")
+        var w = claudeLimitByKind("weekly_all")
+        if (showClaude && (s || w))
+            lines.push("Claude   " + (s ? "5h " + Math.round(s.percent) + "%" : "")
+                + (s && w ? "  ·  " : "") + (w ? "7d " + Math.round(w.percent) + "%" : ""))
+        if (showCodex && codexWeekly)
+            lines.push("Codex    7d " + Math.round(codexWeekly.used_percent || 0) + "%")
+        var t = ccToday()
+        if (ccusageEnabled && t)
+            lines.push("Today    $" + (t.totalCost || 0).toFixed(2) + "  ·  " + fmtTokens(t.totalTokens || 0) + " tokens")
+        return lines.length ? lines.join("\n") : "Click for usage details"
+    }
+
     // Font Awesome
     FontLoader { id: faFont; source: "../fonts/fa-solid-900.ttf" }
 
@@ -757,23 +774,6 @@ PlasmoidItem {
                     return '<table cellspacing="0" cellpadding="3">' + rows + '</table>'
                 }
             }
-            Text {
-                visible: root.popupMode === "claude" && root.ccusageEnabled
-                textFormat: Text.RichText
-                text: {
-                    var t = root.ccToday()
-                    if (!t) return '<span style="color:' + root.claudeDimHex + ';">' + (root.ccRunning ? 'Loading local stats…' : 'No local stats') + '</span>'
-                    var rows = '<tr><td style="padding-right:22px;"><span style="color:#FFFFFF;"><b>Today</b></span></td>'
-                        + '<td><span style="color:#FFFFFF;">$' + (t.totalCost || 0).toFixed(2) + ' &#183; ' + root.fmtTokens(t.totalTokens || 0) + ' tokens</span></td></tr>'
-                        + '<tr><td style="padding-right:22px;"><span style="color:#FFFFFF;"><b>Last 7 days</b></span></td>'
-                        + '<td><span style="color:#FFFFFF;">$' + root.ccWeekCost().toFixed(2) + '</span></td></tr>'
-                    var mb = t.modelBreakdowns || []
-                    for (var i = 0; i < mb.length; i++)
-                        rows += '<tr><td colspan="2"><span style="color:' + root.claudeDimHex + ';">&nbsp;&nbsp;' + mb[i].modelName + ': $' + (mb[i].cost || 0).toFixed(2) + '</span></td></tr>'
-                    return '<table cellspacing="0" cellpadding="2">' + rows + '</table>'
-                }
-            }
-
             // ── Codex section ──
             Rectangle {
                 visible: root.popupMode === "claude" && root.showCodex
@@ -813,6 +813,38 @@ PlasmoidItem {
                 }
             }
 
+            // ── Local spend (Claude Code logs — includes any routed models) ──
+            Rectangle {
+                visible: root.popupMode === "claude" && root.ccusageEnabled
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                Layout.bottomMargin: 4
+                height: 1
+                color: "#33888888"
+            }
+            Text {
+                visible: root.popupMode === "claude" && root.ccusageEnabled
+                textFormat: Text.RichText
+                text: '<b style="font-size:13pt; color:#B0BEC5;">Local spend</b>'
+                    + '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">this machine, all models in Claude Code logs</span>'
+            }
+            Text {
+                visible: root.popupMode === "claude" && root.ccusageEnabled
+                textFormat: Text.RichText
+                text: {
+                    var t = root.ccToday()
+                    if (!t) return '<span style="color:' + root.claudeDimHex + ';">' + (root.ccRunning ? 'Loading local stats…' : 'No local stats') + '</span>'
+                    var rows = '<tr><td style="padding-right:22px;"><span style="color:#FFFFFF;"><b>Today</b></span></td>'
+                        + '<td><span style="color:#FFFFFF;">$' + (t.totalCost || 0).toFixed(2) + ' &#183; ' + root.fmtTokens(t.totalTokens || 0) + ' tokens</span></td></tr>'
+                        + '<tr><td style="padding-right:22px;"><span style="color:#FFFFFF;"><b>Last 7 days</b></span></td>'
+                        + '<td><span style="color:#FFFFFF;">$' + root.ccWeekCost().toFixed(2) + '</span></td></tr>'
+                    var mb = t.modelBreakdowns || []
+                    for (var i = 0; i < mb.length; i++)
+                        rows += '<tr><td colspan="2"><span style="color:' + root.claudeDimHex + ';">&nbsp;&nbsp;' + mb[i].modelName + ': $' + (mb[i].cost || 0).toFixed(2) + '</span></td></tr>'
+                    return '<table cellspacing="0" cellpadding="2">' + rows + '</table>'
+                }
+            }
+
             // ── Footer: check button + freshness ──
             Rectangle {
                 visible: root.popupMode === "claude"
@@ -826,17 +858,11 @@ PlasmoidItem {
                 Layout.fillWidth: true
                 spacing: 12
 
-                Text {
-                    textFormat: Text.RichText
-                    text: root.checking
-                        ? '<span style="color:' + root.claudeDimHex + ';">&#x27F3; Checking…</span>'
-                        : '<b><span style="color:' + root.claudeResetHex + ';">&#x27F3; Check now</span></b>'
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        enabled: !root.checking
-                        onClicked: root.forceCheck()
-                    }
+                PlasmaComponents.Button {
+                    text: root.checking ? "Checking…" : "Check now"
+                    icon.name: "view-refresh"
+                    enabled: !root.checking
+                    onClicked: root.forceCheck()
                 }
                 Item { Layout.fillWidth: true }
                 Text {
