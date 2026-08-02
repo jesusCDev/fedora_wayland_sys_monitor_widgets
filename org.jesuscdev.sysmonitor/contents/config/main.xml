@@ -148,6 +148,9 @@
         <entry name="ccusageEnabled" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="showCodex" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="ccusagePath" type="String">
             <default>/home/jesuscdev/.nvm/versions/node/v22.21.1/bin/node /home/jesuscdev/.npm/_npx/b8bc0fb451ae8722/node_modules/.bin/ccusage</default>
         </entry>

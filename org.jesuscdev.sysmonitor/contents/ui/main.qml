@@ -91,6 +91,13 @@ PlasmoidItem {
     property double ccFetchedAt: 0       // epoch ms
     property bool ccRunning: false
 
+    // Codex/ChatGPT usage state (from last codex run's session log)
+    property bool showCodex: Plasmoid.configuration.showCodex
+    property var codexPrimary: null
+    property var codexSecondary: null
+    property double codexFetchedAt: 0    // epoch seconds of the rate_limits event
+    readonly property bool codexOld: codexFetchedAt > 0 && (Date.now() / 1000 - codexFetchedAt) > 6 * 3600
+
     // Which section the popup shows: "sys" (middle-click on metrics) or "claude" (click Claude segment)
     property string popupMode: "sys"
 
@@ -222,6 +229,53 @@ PlasmoidItem {
         var body = parts.length ? parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>')
                                 : '<span style="color:' + claudeDimHex + ';">…</span>'
         return '<b>' + claudeIconHtml() + body + '</b>'
+    }
+
+    // ── Codex (ChatGPT) helpers ─────────────────────────────────
+    readonly property string codexIconHex: "#7FD8BE"     // pastel OpenAI teal
+
+    function codexPctColor(p) {
+        if (codexOld) return claudeDimHex
+        if (p >= claudeCritThreshold) return claudeCritHex
+        if (p >= claudeWarnThreshold) return claudeWarnHex
+        return claudeOkHex
+    }
+
+    function codexIconHtml() {
+        return '<span style="color:' + codexIconHex + ';">&#x232C;</span> '
+    }
+
+    function codexItemHtml() {
+        if (!codexPrimary) return '<b>' + codexIconHtml() + '<span style="color:' + claudeDimHex + ';">…</span></b>'
+        var p = codexPrimary.used_percent || 0
+        var s = codexSecondary ? (codexSecondary.used_percent || 0) : null
+        var html = '<span style="color:' + claudeResetHex + ';">5h </span>'
+            + '<span style="color:' + codexPctColor(p) + ';">' + fmtPct(p) + '</span>'
+        if (s !== null)
+            html += '<span style="color:' + claudeDimHex + ';">&#183; </span>'
+                + '<span style="color:' + claudeResetHex + ';">7d </span>'
+                + '<span style="color:' + codexPctColor(s) + ';">' + fmtPct(s) + '</span>'
+        return '<b>' + codexIconHtml() + html + '</b>'
+    }
+
+    function codexAge() {
+        if (!codexFetchedAt) return ""
+        var h = Math.floor((Date.now() / 1000 - codexFetchedAt) / 3600)
+        if (h < 1) return "just now"
+        if (h < 48) return h + "h ago"
+        return Math.floor(h / 24) + "d ago"
+    }
+
+    function fmtEpochReset(epoch) {
+        if (!epoch) return ""
+        var ms = epoch * 1000 - Date.now()
+        if (ms <= 0) return "reset elapsed"
+        var m = Math.floor(ms / 60000)
+        var d = Math.floor(m / 1440)
+        var h = Math.floor((m % 1440) / 60)
+        if (d > 0) return "resets in " + d + "d " + h + "h"
+        if (h > 0) return "resets in " + h + "h " + (m % 60) + "m"
+        return "resets in " + (m % 60) + "m"
     }
 
     function ccToday() {
@@ -541,6 +595,20 @@ PlasmoidItem {
                         onClicked: root.togglePopup("claude")
                     }
                 }
+
+                Text {
+                    visible: root.showCodex
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: root.codexItemHtml()
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.togglePopup("claude")
+                    }
+                }
             }
 
             // Separator + Battery on RIGHT
@@ -645,6 +713,31 @@ PlasmoidItem {
                     text: '<span style="font-size:12pt;"><span style="color:#FFFFFF;">' + root.claudeLimitLabel(modelData) + ':  </span>'
                         + '<b><span style="color:' + root.claudePctColor(modelData.percent) + ';">' + Math.round(modelData.percent) + '%</span></b>'
                         + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.claudeFmtReset(modelData.resets_at) + '</span></span>'
+                }
+            }
+            Text {
+                visible: root.popupMode === "claude" && root.showCodex
+                textFormat: Text.RichText
+                text: root.codexIconHtml()
+                    + '<b style="font-size:12pt; color:' + root.codexIconHex + ';">Codex</b>'
+                    + (root.codexFetchedAt ? ' <span style="color:' + root.claudeDimHex + ';">as of last run ' + root.codexAge() + '</span>' : '')
+            }
+            Text {
+                visible: root.popupMode === "claude" && root.showCodex
+                textFormat: Text.RichText
+                text: {
+                    if (!root.codexPrimary)
+                        return '<span style="color:' + root.claudeDimHex + ';">No codex session data</span>'
+                    var out = '<span style="font-size:12pt;"><span style="color:#FFFFFF;">Session (5h):  </span>'
+                        + '<b><span style="color:' + root.codexPctColor(root.codexPrimary.used_percent || 0) + ';">'
+                        + Math.round(root.codexPrimary.used_percent || 0) + '%</span></b>'
+                        + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.fmtEpochReset(root.codexPrimary.resets_at) + '</span></span>'
+                    if (root.codexSecondary)
+                        out += '<br><span style="font-size:12pt;"><span style="color:#FFFFFF;">Weekly:  </span>'
+                            + '<b><span style="color:' + root.codexPctColor(root.codexSecondary.used_percent || 0) + ';">'
+                            + Math.round(root.codexSecondary.used_percent || 0) + '%</span></b>'
+                            + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.fmtEpochReset(root.codexSecondary.resets_at) + '</span></span>'
+                    return out
                 }
             }
             Text {
@@ -996,6 +1089,32 @@ PlasmoidItem {
     function refreshClaude() {
         if (showClaude)
             claudeSource.connectSource("bash " + claudeScriptPath)
+        if (showCodex)
+            codexSource.connectSource("bash " + claudeScriptPath.replace("fetch-usage.sh", "fetch-codex.sh"))
+    }
+
+    PlasmaSupport.DataSource {
+        id: codexSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "").trim()
+                delete buffers[source]
+                disconnectSource(source)
+                try {
+                    var obj = JSON.parse(output)
+                    if (obj.ok) {
+                        root.codexPrimary = obj.primary || null
+                        root.codexSecondary = obj.secondary || null
+                        root.codexFetchedAt = obj.fetched_at || 0
+                    }
+                } catch (e) { /* keep old data */ }
+            }
+        }
     }
 
     function refreshCcusage() {

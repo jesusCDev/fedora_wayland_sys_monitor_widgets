@@ -21,6 +21,7 @@ ScrollView {
     property alias cfg_claudeWarnThreshold: claudeWarnSpin.value
     property alias cfg_claudeCritThreshold: claudeCritSpin.value
     property alias cfg_ccusageEnabled: ccusageCheck.checked
+    property alias cfg_showCodex: codexCheck.checked
     property alias cfg_ccusagePath: ccusagePathField.text
 
     Kirigami.FormLayout {
@@ -127,6 +128,12 @@ ScrollView {
             id: ccusageCheck
             Kirigami.FormData.label: "Cost stats:"
             text: "Show token/cost stats in popup (ccusage)"
+        }
+
+        CheckBox {
+            id: codexCheck
+            Kirigami.FormData.label: "Codex:"
+            text: "Show Codex/ChatGPT usage (from last codex run)"
         }
 
         TextField {
