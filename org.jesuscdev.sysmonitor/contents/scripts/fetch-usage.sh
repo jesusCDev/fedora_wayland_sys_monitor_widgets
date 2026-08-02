@@ -43,6 +43,14 @@ case "$CODE" in
             --arg tier "$(jq -r '.claudeAiOauth.rateLimitTier // ""' "$CREDS")" \
             '{ok:true, plan:$plan, tier:$tier, fetched_at:(now|floor), usage:$usage}' 2>/dev/null) || fail "bad-json"
         printf '%s' "$BODY" > "$CACHE"
+        # Append sample for the popup sparkline (epoch, session %, weekly %)
+        HIST="${XDG_CACHE_HOME:-$HOME/.cache}/claude-usage-history.tsv"
+        SP=$(echo "$BODY" | jq -r '[.limits[]? | select(.kind=="session") | .percent][0] // ""')
+        WP=$(echo "$BODY" | jq -r '[.limits[]? | select(.kind=="weekly_all") | .percent][0] // ""')
+        printf '%s\t%s\t%s\n' "$(date +%s)" "$SP" "$WP" >> "$HIST"
+        if (( $(wc -l < "$HIST") > 2000 )); then
+            tail -n 1500 "$HIST" > "$HIST.tmp" && mv "$HIST.tmp" "$HIST"
+        fi
         echo "$OUT"
         ;;
     401|403) fail "auth" ;;

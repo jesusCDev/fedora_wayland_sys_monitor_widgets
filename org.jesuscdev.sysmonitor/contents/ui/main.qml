@@ -114,8 +114,21 @@ PlasmoidItem {
     property var codexWeekly: null       // {used_percent, resets_at, fetched_at}
     property var codexSession: null      // {used_percent, resets_at, fetched_at} or null
     property string codexPlan: ""
+    property var codexFeatures: []
     readonly property double codexFetchedAt: codexWeekly ? codexWeekly.fetched_at : 0
     readonly property bool codexOld: codexFetchedAt > 0 && (Date.now() / 1000 - codexFetchedAt) > 1800
+
+    // Notifications + sparkline + on-demand process list
+    property bool notifyEnabled: Plasmoid.configuration.notifyEnabled
+    property bool showCostPanel: Plasmoid.configuration.showCostPanel
+    property real prevSessionPct: -1
+    property var claudeHist: []   // [{t, p}] session % samples, last 24h shown
+    property var codexHist: []    // [{t, p}] weekly % samples
+    property var topProcs: []     // [{name, cpu, mem}] fetched only on sys-popup open
+
+    function notify(title, body) {
+        launchSource.connectSource('notify-send -a "AI Usage" -i office-chart-line "' + title + '" "' + body + '"')
+    }
 
     // Which section the popup shows: "sys" (middle-click on metrics) or "claude" (click Claude segment)
     property string popupMode: "sys"
@@ -437,12 +450,9 @@ PlasmoidItem {
     }
 
     function metricClicked(type) {
-        if (type === "cpu" || type === "gpu" || type === "ram" || type === "disk")
-            launchApp(clickCommand)
-        else if (type === "net")
-            launchApp("kcmshell6 kcm_networkmanagement")
-        else if (type === "uptime" || type === "bat")
-            launchApp("kcmshell6 kcm_powerdevilprofilesconfig")
+        // Left-click = detail popup with top processes; middle-click still toggles it too.
+        // Old launcher actions move to the popup being open + external tools if wanted.
+        togglePopup("sys")
     }
 
     // Helper: are any system metrics visible?
@@ -503,7 +513,7 @@ PlasmoidItem {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
-                        else root.togglePopup("sys")
+                        else root.launchApp(root.clickCommand)
                     }
                 }
             }
@@ -527,7 +537,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("cpu")
-                            else root.togglePopup("sys")
+                            else root.launchApp(root.clickCommand)
                         }
                     }
                 }
@@ -547,7 +557,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("gpu")
-                            else root.togglePopup("sys")
+                            else root.launchApp(root.clickCommand)
                         }
                     }
                 }
@@ -566,7 +576,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("ram")
-                            else root.togglePopup("sys")
+                            else root.launchApp(root.clickCommand)
                         }
                     }
                 }
@@ -584,7 +594,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("disk")
-                            else root.togglePopup("sys")
+                            else root.launchApp(root.clickCommand)
                         }
                     }
                 }
@@ -602,7 +612,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("uptime")
-                            else root.togglePopup("sys")
+                            else root.launchApp(root.clickCommand)
                         }
                     }
                 }
@@ -621,7 +631,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("net")
-                            else root.togglePopup("sys")
+                            else root.launchApp(root.clickCommand)
                         }
                     }
                 }
@@ -636,7 +646,10 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.togglePopup("claude")
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.MiddleButton) root.launchApp("xdg-open https://claude.ai/settings/usage")
+                            else root.togglePopup("claude")
+                        }
                     }
                 }
 
@@ -658,6 +671,27 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.MiddleButton) root.launchApp("xdg-open https://chatgpt.com/codex/settings/usage")
+                            else root.togglePopup("claude")
+                        }
+                    }
+                }
+
+                Text {  // today's local spend
+                    visible: root.showCostPanel && root.ccToday() !== null
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: {
+                        var t = root.ccToday()
+                        if (!t) return ""
+                        return '<b><span style="color:' + root.claudeDimHex + ';">$</span><span style="color:#E8EAED;">'
+                            + Math.round(t.totalCost || 0) + '</span></b>'
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
                         onClicked: root.togglePopup("claude")
                     }
                 }
@@ -676,7 +710,7 @@ PlasmoidItem {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
-                        else root.togglePopup("sys")
+                        else root.launchApp(root.clickCommand)
                     }
                 }
             }
@@ -740,8 +774,34 @@ PlasmoidItem {
                 visible: root.popupMode === "sys" && root.showBat && root.batValue >= 0
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%'
-                    + (root.showBatTime ? '  ' + root.fmtBatTime() : '') + '</b></span>'
+                    + (root.fmtBatTime() ? '  ' + root.fmtBatTime() + (root.batCharging ? ' to full' : ' left') : '')
+                    + (root.batPowerNow > 0 ? '  &#183; ' + (root.batPowerNow / 1000000).toFixed(1) + 'W' : '') + '</b></span>'
                     + ((root.showChargingIcon && root.batCharging) ? ' <span style="font-family:\'' + faFont.name + '\'; color:#FFFFFF; font-size:12pt;">&#xf0e7;</span>' : '')
+            }
+            Rectangle {
+                visible: root.popupMode === "sys" && root.topProcs.length > 0
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                Layout.bottomMargin: 4
+                height: 1
+                color: "#33888888"
+            }
+            Text {
+                visible: root.popupMode === "sys" && root.topProcs.length > 0
+                textFormat: Text.RichText
+                text: {
+                    var rows = '<tr>'
+                        + '<td style="padding-right:20px;"><span style="color:#B0BEC5;"><b>Top processes</b></span></td>'
+                        + '<td style="padding-right:14px;"><span style="color:' + root.claudeDimHex + ';">CPU</span></td>'
+                        + '<td><span style="color:' + root.claudeDimHex + ';">MEM</span></td></tr>'
+                    for (var i = 0; i < root.topProcs.length; i++) {
+                        var pr = root.topProcs[i]
+                        rows += '<tr><td style="padding-right:20px;"><span style="color:#FFFFFF;">' + pr.name + '</span></td>'
+                            + '<td style="padding-right:14px;"><span style="color:' + root.cpuHex + ';">' + pr.cpu + '%</span></td>'
+                            + '<td><span style="color:' + root.ramHex + ';">' + pr.mem + '%</span></td></tr>'
+                    }
+                    return '<table cellspacing="0" cellpadding="2">' + rows + '</table>'
+                }
             }
 
             // ── Claude usage section ──
@@ -773,6 +833,36 @@ PlasmoidItem {
                     }
                     return '<table cellspacing="0" cellpadding="3">' + rows + '</table>'
                 }
+            }
+            RowLayout {
+                visible: root.popupMode === "claude" && root.claudeHist.length > 1
+                spacing: 10
+                Canvas {
+                    id: claudeSpark
+                    width: 240; height: 30
+                    property var pts: root.claudeHist
+                    onPtsChanged: requestPaint()
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.strokeStyle = "#33888888"
+                        ctx.lineWidth = 1
+                        ctx.beginPath(); ctx.moveTo(0, height - 1); ctx.lineTo(width, height - 1); ctx.stroke()
+                        var now = Date.now() / 1000, from = now - 86400
+                        ctx.strokeStyle = root.claudeOkHex
+                        ctx.lineWidth = 1.5
+                        ctx.beginPath()
+                        var started = false
+                        for (var i = 0; i < pts.length; i++) {
+                            if (pts[i].t < from) continue
+                            var x = (pts[i].t - from) / 86400 * width
+                            var y = height - 2 - (pts[i].p / 100) * (height - 4)
+                            if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
+                        }
+                        ctx.stroke()
+                    }
+                }
+                Text { color: root.claudeDimHex; font.pointSize: 8; text: "5h window, last 24h" }
             }
             // ── Codex section ──
             Rectangle {
@@ -809,8 +899,41 @@ PlasmoidItem {
                         rows += row('Session (5h)', root.codexSession.used_percent || 0, root.codexSession.resets_at)
                     if (root.codexWeekly)
                         rows += row('Weekly (account)', root.codexWeekly.used_percent || 0, root.codexWeekly.resets_at)
+                    for (var i = 0; i < root.codexFeatures.length; i++) {
+                        var f = root.codexFeatures[i]
+                        rows += row(f.name, f.used_percent || 0, f.resets_at)
+                    }
                     return '<table cellspacing="0" cellpadding="3">' + rows + '</table>'
                 }
+            }
+            RowLayout {
+                visible: root.popupMode === "claude" && root.showCodex && root.codexHist.length > 1
+                spacing: 10
+                Canvas {
+                    width: 240; height: 30
+                    property var pts: root.codexHist
+                    onPtsChanged: requestPaint()
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.clearRect(0, 0, width, height)
+                        ctx.strokeStyle = "#33888888"
+                        ctx.lineWidth = 1
+                        ctx.beginPath(); ctx.moveTo(0, height - 1); ctx.lineTo(width, height - 1); ctx.stroke()
+                        var now = Date.now() / 1000, from = now - 86400
+                        ctx.strokeStyle = root.codexOkHex
+                        ctx.lineWidth = 1.5
+                        ctx.beginPath()
+                        var started = false
+                        for (var i = 0; i < pts.length; i++) {
+                            if (pts[i].t < from) continue
+                            var x = (pts[i].t - from) / 86400 * width
+                            var y = height - 2 - (pts[i].p / 100) * (height - 4)
+                            if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
+                        }
+                        ctx.stroke()
+                    }
+                }
+                Text { color: root.claudeDimHex; font.pointSize: 8; text: "7d window, last 24h" }
             }
 
             // ── Local spend (Claude Code logs — includes any routed models) ──
@@ -1171,6 +1294,18 @@ PlasmoidItem {
             if (u.five_hour) newLimits.push({kind: "session", percent: u.five_hour.utilization, resets_at: u.five_hour.resets_at})
             if (u.seven_day) newLimits.push({kind: "weekly_all", percent: u.seven_day.utilization, resets_at: u.seven_day.resets_at})
         }
+        // Threshold / reset notifications (fires only on transitions)
+        var sess = null
+        for (var k = 0; k < newLimits.length; k++)
+            if (newLimits[k].kind === "session") sess = newLimits[k]
+        if (notifyEnabled && sess && prevSessionPct >= 0 && obj.stale !== true) {
+            if (prevSessionPct < claudeCritThreshold && sess.percent >= claudeCritThreshold)
+                notify("Claude session at " + Math.round(sess.percent) + "%", claudeFmtReset(sess.resets_at))
+            if (prevSessionPct >= 20 && sess.percent <= 5)
+                notify("Claude 5h window reset", "Session back to " + Math.round(sess.percent) + "%")
+        }
+        if (sess && obj.stale !== true) prevSessionPct = sess.percent
+
         claudeLimits = newLimits
         claudePlan = obj.plan || ""
         claudeTier = obj.tier || ""
@@ -1206,6 +1341,8 @@ PlasmoidItem {
     function refreshClaude() {
         if (showClaude)
             claudeSource.connectSource("bash " + claudeScriptPath)
+        if (showCostPanel)
+            refreshCcusage()
         if (showCodex)
             codexSource.connectSource("bash " + claudeScriptPath.replace("fetch-usage.sh", "fetch-codex.sh"))
     }
@@ -1228,6 +1365,7 @@ PlasmoidItem {
                         root.codexWeekly = obj.weekly || null
                         root.codexSession = obj.session5h || null
                         root.codexPlan = obj.plan || ""
+                        root.codexFeatures = obj.features || []
                     }
                 } catch (e) { /* keep old data */ }
             }
@@ -1245,10 +1383,82 @@ PlasmoidItem {
         ccusageSource.connectSource(ccusagePath + " daily --json --since " + since)
     }
 
+    PlasmaSupport.DataSource {
+        id: histSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "")
+                delete buffers[source]
+                disconnectSource(source)
+                parseHist(output)
+            }
+        }
+    }
+
+    function parseHist(output) {
+        var lines = output.split("\n")
+        var mode = "", ch = [], xh = []
+        for (var i = 0; i < lines.length; i++) {
+            var ln = lines[i].trim()
+            if (ln === "CLAUDE") { mode = "c"; continue }
+            if (ln === "CODEX") { mode = "x"; continue }
+            if (!ln) continue
+            var f = ln.split("\t")
+            var t = parseInt(f[0]); var pv = parseFloat(f[1])
+            if (isNaN(t) || isNaN(pv)) continue
+            if (mode === "c") ch.push({t: t, p: pv})
+            else if (mode === "x") xh.push({t: t, p: pv})
+        }
+        claudeHist = ch
+        codexHist = xh
+    }
+
+    function refreshHist() {
+        var c = "${XDG_CACHE_HOME:-$HOME/.cache}"
+        histSource.connectSource("sh -c 'echo CLAUDE; tail -n 1500 " + c + "/claude-usage-history.tsv 2>/dev/null; echo CODEX; tail -n 1500 " + c + "/codex-usage-history.tsv 2>/dev/null'")
+    }
+
+    PlasmaSupport.DataSource {
+        id: procSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "")
+                delete buffers[source]
+                disconnectSource(source)
+                var rows = output.split("\n"), out = []
+                for (var i = 1; i < rows.length && out.length < 7; i++) {
+                    var f = rows[i].trim().split(/\s+/)
+                    if (f.length >= 3 && parseFloat(f[f.length - 2]) > 0)
+                        out.push({name: f.slice(0, f.length - 2).join(" "), cpu: f[f.length - 2], mem: f[f.length - 1]})
+                }
+                topProcs = out
+            }
+        }
+    }
+
+    function refreshProcs() {
+        procSource.connectSource("sh -c 'ps -eo comm,%cpu,%mem --sort=-%cpu | head -12'")
+    }
+
     onExpandedChanged: {
         if (root.expanded) {
-            refreshClaude()
-            refreshCcusage()
+            if (popupMode === "claude") {
+                refreshClaude()
+                refreshCcusage()
+                refreshHist()
+            } else {
+                refreshProcs()
+            }
         }
     }
 

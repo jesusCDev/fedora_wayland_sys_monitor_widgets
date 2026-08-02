@@ -22,7 +22,14 @@ if [[ -r "$AUTH" ]] && { [[ ! -s "$CACHE" ]] || (( $(cache_age) > THROTTLE )); }
 Authorization: Bearer $TOKEN
 chatgpt-account-id: $ACC
 EOF
-) && echo "$BODY" | jq -e '.rate_limit' >/dev/null 2>&1 && printf '%s' "$BODY" > "$CACHE"
+) && echo "$BODY" | jq -e '.rate_limit' >/dev/null 2>&1 && {
+            printf '%s' "$BODY" > "$CACHE"
+            HIST="${XDG_CACHE_HOME:-$HOME/.cache}/codex-usage-history.tsv"
+            printf '%s\t%s\n' "$(date +%s)" "$(echo "$BODY" | jq -r '.rate_limit.primary_window.used_percent // ""')" >> "$HIST"
+            if (( $(wc -l < "$HIST") > 2000 )); then
+                tail -n 1500 "$HIST" > "$HIST.tmp" && mv "$HIST.tmp" "$HIST"
+            fi
+        }
     fi
 fi
 
@@ -57,6 +64,11 @@ jq -n --argjson wham "$WHAM" --argjson wham_at "$WHAM_AT" --argjson sess "$SESS"
         used_percent: ($sess.primary.used_percent // 0),
         resets_at: ($sess.primary.resets_at // 0),
         fetched_at: $sess.fetched_at
-    } else null end)
+    } else null end),
+    features: ([$wham.additional_rate_limits[]? | {
+        name: (.limit_name // .metered_feature),
+        used_percent: (.rate_limit.primary_window.used_percent // 0),
+        resets_at: (.rate_limit.primary_window.reset_at // 0)
+    }])
 }' 2>/dev/null || echo '{"ok":false,"error":"parse"}'
 exit 0

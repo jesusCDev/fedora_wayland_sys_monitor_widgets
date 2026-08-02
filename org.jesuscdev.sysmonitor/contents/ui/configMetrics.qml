@@ -22,6 +22,8 @@ ScrollView {
     property alias cfg_claudeCritThreshold: claudeCritSpin.value
     property alias cfg_ccusageEnabled: ccusageCheck.checked
     property alias cfg_showCodex: codexCheck.checked
+    property alias cfg_notifyEnabled: notifyCheck.checked
+    property alias cfg_showCostPanel: costPanelCheck.checked
     property alias cfg_ccusagePath: ccusagePathField.text
 
     Kirigami.FormLayout {
@@ -133,7 +135,19 @@ ScrollView {
         CheckBox {
             id: codexCheck
             Kirigami.FormData.label: "Codex:"
-            text: "Show Codex/ChatGPT usage (from last codex run)"
+            text: "Show Codex/ChatGPT usage"
+        }
+
+        CheckBox {
+            id: notifyCheck
+            Kirigami.FormData.label: "Alerts:"
+            text: "Notify when Claude session crosses red threshold / resets"
+        }
+
+        CheckBox {
+            id: costPanelCheck
+            Kirigami.FormData.label: "Cost in panel:"
+            text: "Show today's local spend ($) in the panel"
         }
 
         TextField {
