@@ -80,8 +80,10 @@ PlasmoidItem {
                             case "bat": return "Battery " + Math.round(root.batValue) + "%"
                             case "cpu": return "CPU " + root.fmt(root.cpuValue) + "%"
                             case "gpu": return "GPU " + root.fmt(root.gpuValue) + "%"
-                            case "ram": return "RAM " + root.fmtRam().replace(/&nbsp;/g, "")
-                            case "net": return root.netConnected ? "Network ↓ " + root.fmtNetSpeed(root.netDownBytes).replace(/&nbsp;/g, "") : "Network — disconnected"
+                            case "ram": return "RAM " + root.ramUsedGB.toFixed(1) + "G / " + root.ramTotalGB.toFixed(1) + "G  (" + Math.round(root.ramValue) + "%)"
+                            case "net": return root.netConnected
+                                ? "Net  ↓ " + root.fmtNetSpeed(root.netDownBytes).replace(/&nbsp;/g, "") + "   ↑ " + root.fmtNetSpeed(root.netUpBytes).replace(/&nbsp;/g, "")
+                                : "Network — disconnected"
                             case "disk": return "Storage " + Math.round(root.diskValue) + "%"
                             case "uptime": return "System"
                             default: return "AI Usage"
@@ -100,23 +102,76 @@ PlasmoidItem {
                             + (root.fmtBatTime() ? (root.batPowerNow > 0 ? "   ·   " : "") + "~" + root.fmtBatTime() + (root.batCharging ? " until full" : " until empty") : "")
                     }
 
-                    // CPU/GPU/RAM/NET: top processes
-                    Text {
-                        visible: ["gpu", "net"].indexOf(root.hoverSeg) >= 0
-                        color: root.claudeDimHex
-                        font.pointSize: 8
-                        text: root.hoverSeg === "gpu" ? "per-app GPU not exposed — CPU shown" : "per-app traffic needs root — CPU shown"
-                    }
+                    // CPU: top by processor
                     ProcTable {
-                        visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topProcs.length > 0
+                        visible: root.hoverSeg === "cpu" && root.topProcs.length > 0
                         title: "Top activity"
                         procs: root.topProcs
                     }
-                    Item { visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topApps.length > 0; height: 2 }
+                    Item { visible: root.hoverSeg === "cpu" && root.topApps.length > 0; height: 2 }
                     ProcTable {
-                        visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topApps.length > 0
+                        visible: root.hoverSeg === "cpu" && root.topApps.length > 0
                         title: "Top apps"
                         procs: root.topApps
+                    }
+
+                    // RAM: top by memory
+                    ProcTable {
+                        visible: root.hoverSeg === "ram" && root.topMem.length > 0
+                        title: "Top memory"
+                        procs: root.topMem
+                        col1Label: "MEM"
+                        col2Label: "SIZE"
+                        col1Color: root.ramHex
+                        col2Color: root.claudeDimHex
+                    }
+                    Item { visible: root.hoverSeg === "ram" && root.topMemApps.length > 0; height: 2 }
+                    ProcTable {
+                        visible: root.hoverSeg === "ram" && root.topMemApps.length > 0
+                        title: "Top apps"
+                        procs: root.topMemApps
+                        col1Label: "MEM"
+                        col2Label: "SIZE"
+                        col1Color: root.ramHex
+                        col2Color: root.claudeDimHex
+                    }
+
+                    // GPU: per-process via DRM fdinfo
+                    ProcTable {
+                        visible: root.hoverSeg === "gpu" && root.gpuProcs.length > 0
+                        title: "GPU users"
+                        procs: root.gpuProcs
+                        col1Label: "GPU"
+                        col2Label: ""
+                        col1Color: root.gpuHex
+                    }
+                    Text {
+                        visible: root.hoverSeg === "gpu" && root.gpuProcs.length === 0
+                        color: root.claudeDimHex
+                        font.pointSize: 9
+                        text: "GPU idle — no per-app activity right now"
+                    }
+
+                    // NET: interface + per-app connections
+                    Text {
+                        visible: root.hoverSeg === "net" && root.netIface !== ""
+                        color: root.claudeDimHex
+                        font.pointSize: 9
+                        text: root.netIface + "  ·  " + root.netIP
+                    }
+                    ProcTable {
+                        visible: root.hoverSeg === "net" && root.netApps.length > 0
+                        title: "Connections"
+                        procs: root.netApps
+                        col1Label: ""
+                        col2Label: ""
+                        col1Color: root.netHex
+                    }
+                    Text {
+                        visible: root.hoverSeg === "net" && root.netApps.length === 0
+                        color: root.claudeDimHex
+                        font.pointSize: 8
+                        text: "per-app bandwidth needs root — showing connection counts"
                     }
 
                     // Storage
@@ -189,11 +244,69 @@ PlasmoidItem {
 
     property Item hoverAnchor: null
 
+    PlasmaSupport.DataSource {
+        id: gpuTopSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "").trim()
+                delete buffers[source]
+                disconnectSource(source)
+                var out = []
+                var lines = output.split("\n")
+                for (var i = 0; i < lines.length; i++) {
+                    var f = lines[i].split("\t")
+                    if (f.length === 2 && f[0]) out.push({name: f[0], v1: f[1], v2: ""})
+                }
+                gpuProcs = out
+            }
+        }
+    }
+
+    PlasmaSupport.DataSource {
+        id: netInfoSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "")
+                delete buffers[source]
+                disconnectSource(source)
+                var lines = output.split("\n"), apps = [], pastSep = false
+                for (var i = 0; i < lines.length; i++) {
+                    var ln = lines[i].trim()
+                    if (ln === "---") { pastSep = true; continue }
+                    if (!ln) continue
+                    if (!pastSep) {
+                        var f = ln.split(" ")
+                        netIface = f[0] || ""
+                        netIP = f[1] || ""
+                    } else {
+                        var m = ln.match(/^(\d+)\s+"(.+)"$/)
+                        if (m && apps.length < 3) apps.push({name: m[2], v1: m[1] + " conn", v2: ""})
+                    }
+                }
+                netApps = apps
+            }
+        }
+    }
+
     function segHovered(seg, item) {
         hoverSeg = seg
         if (item !== undefined) hoverAnchor = item
-        if (seg === "cpu" || seg === "gpu" || seg === "ram" || seg === "net")
+        if (seg === "cpu" || seg === "ram")
             refreshProcs()
+        else if (seg === "gpu")
+            gpuTopSource.connectSource("bash " + claudeScriptPath.replace("fetch-usage.sh", "gpu-top.sh"))
+        else if (seg === "net")
+            netInfoSource.connectSource("sh -c 'ip -o route get 1.1.1.1 2>/dev/null | sed -E \"s/.* dev ([^ ]+).* src ([^ ]+).*/\\1 \\2/\"; echo ---; ss -tnp state established 2>/dev/null | grep -oE \"\\\"[^\\\"]+\\\"\" | sort | uniq -c | sort -rn | head -3 | sed -E \"s/^ +//\"'")
         else if (seg === "disk")
             diskSource.connectSource("sh -c \"df -BG / --output=pcent,size,used | tail -1 | tr -d '%G'\"")
         else if (seg === "uptime")
@@ -300,6 +413,15 @@ PlasmoidItem {
     property var codexHist: []    // [{t, p}] weekly % samples
     property var topProcs: []     // top 3 by CPU, any process — fetched only on sys-popup open
     property var topApps: []      // top 3 excluding system/background processes
+    property var topMem: []       // memory view of the same aggregation
+    property var topMemApps: []
+    property var gpuProcs: []     // [{name, v1: pct}] from gpu-top.sh
+    property var netApps: []      // [{name, v1: "N conns"}]
+    property string netIface: ""
+    property string netIP: ""
+    property real ramTotalGB: 0
+    property real netUpBytes: 0
+    property real prevNetTxBytes: 0
 
     function notify(title, body) {
         launchSource.connectSource('notify-send -a "AI Usage" -i office-chart-line "' + title + '" "' + body + '"')
@@ -367,27 +489,31 @@ PlasmoidItem {
     component ProcTable: GridLayout {
         id: pt
         property string title
-        property var procs: []
-        columns: 3
+        property var procs: []          // [{name, v1, v2}]
+        property string col1Label: "CPU"
+        property string col2Label: "MEM"
+        property string col1Color: root.cpuHex
+        property string col2Color: root.ramHex
+        columns: col2Label !== "" ? 3 : 2
         rows: procs.length + 1
         flow: GridLayout.TopToBottom
         columnSpacing: 16
-        rowSpacing: 2
+        rowSpacing: 3
 
         Text { text: pt.title; color: "#B0BEC5"; font.bold: true; font.pointSize: 10 }
         Repeater {
             model: pt.procs
             Text { text: modelData.name; color: "#FFFFFF"; font.pointSize: 10 }
         }
-        Text { text: "CPU"; color: root.claudeDimHex; font.pointSize: 9 }
+        Text { text: pt.col1Label; color: root.claudeDimHex; font.pointSize: 9 }
         Repeater {
             model: pt.procs
-            Text { text: modelData.cpu + "%"; color: root.cpuHex; font.pointSize: 10; Layout.alignment: Qt.AlignRight }
+            Text { text: modelData.v1; color: pt.col1Color; font.pointSize: 10; Layout.alignment: Qt.AlignRight }
         }
-        Text { text: "MEM"; color: root.claudeDimHex; font.pointSize: 9 }
+        Text { visible: pt.col2Label !== ""; text: pt.col2Label; color: root.claudeDimHex; font.pointSize: 9 }
         Repeater {
-            model: pt.procs
-            Text { text: modelData.mem + "%"; color: root.ramHex; font.pointSize: 10; Layout.alignment: Qt.AlignRight }
+            model: pt.col2Label !== "" ? pt.procs : []
+            Text { text: modelData.v2; color: pt.col2Color; font.pointSize: 10; Layout.alignment: Qt.AlignRight }
         }
     }
 
@@ -1104,6 +1230,8 @@ PlasmoidItem {
                 spacing: 10
                 Canvas {
                     id: claudeSpark
+                    Layout.preferredWidth: 240
+                    Layout.preferredHeight: 30
                     width: 240; height: 30
                     property var pts: root.claudeHist
                     onPtsChanged: requestPaint()
@@ -1165,6 +1293,8 @@ PlasmoidItem {
                 visible: root.popupMode === "claude" && root.showCodex && root.codexHist.length > 1
                 spacing: 10
                 Canvas {
+                    Layout.preferredWidth: 240
+                    Layout.preferredHeight: 30
                     width: 240; height: 30
                     property var pts: root.codexHist
                     onPtsChanged: requestPaint()
@@ -1207,19 +1337,36 @@ PlasmoidItem {
                     + '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">this machine, all models in Claude Code logs</span>'
             }
             Text {
-                visible: root.popupMode === "claude" && root.ccusageEnabled
-                textFormat: Text.RichText
-                text: {
-                    var t = root.ccToday()
-                    if (!t) return '<span style="color:' + root.claudeDimHex + ';">' + (root.ccRunning ? 'Loading local stats…' : 'No local stats') + '</span>'
-                    var rows = '<tr><td style="padding-right:22px;"><span style="color:#FFFFFF;"><b>Today</b></span></td>'
-                        + '<td><span style="color:#FFFFFF;">$' + (t.totalCost || 0).toFixed(2) + ' &#183; ' + root.fmtTokens(t.totalTokens || 0) + ' tokens</span></td></tr>'
-                        + '<tr><td style="padding-right:22px;"><span style="color:#FFFFFF;"><b>Last 7 days</b></span></td>'
-                        + '<td><span style="color:#FFFFFF;">$' + root.ccWeekCost().toFixed(2) + '</span></td></tr>'
-                    var mb = t.modelBreakdowns || []
-                    for (var i = 0; i < mb.length; i++)
-                        rows += '<tr><td colspan="2"><span style="color:' + root.claudeDimHex + ';">&nbsp;&nbsp;' + mb[i].modelName + ': $' + (mb[i].cost || 0).toFixed(2) + '</span></td></tr>'
-                    return '<table cellspacing="0" cellpadding="2">' + rows + '</table>'
+                visible: root.popupMode === "claude" && root.ccusageEnabled && root.ccToday() === null
+                color: root.claudeDimHex
+                text: root.ccRunning ? "Loading local stats…" : "No local stats"
+            }
+            GridLayout {
+                visible: root.popupMode === "claude" && root.ccusageEnabled && root.ccToday() !== null
+                columns: 2
+                columnSpacing: 26
+                rowSpacing: 3
+                Text { text: "Today"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
+                Text {
+                    color: "#FFFFFF"; font.pointSize: 10
+                    text: {
+                        var t = root.ccToday()
+                        return t ? "$" + (t.totalCost || 0).toFixed(2) + "  ·  " + root.fmtTokens(t.totalTokens || 0) + " tokens" : ""
+                    }
+                }
+                Text { text: "Last 7 days"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
+                Text { color: "#FFFFFF"; font.pointSize: 10; text: "$" + root.ccWeekCost().toFixed(2) }
+            }
+            ColumnLayout {
+                visible: root.popupMode === "claude" && root.ccusageEnabled && root.ccToday() !== null
+                spacing: 1
+                Repeater {
+                    model: root.ccToday() ? (root.ccToday().modelBreakdowns || []) : []
+                    Text {
+                        color: root.claudeDimHex
+                        font.pointSize: 9
+                        text: "    " + modelData.modelName + ": $" + (modelData.cost || 0).toFixed(2)
+                    }
                 }
             }
 
@@ -1344,6 +1491,7 @@ PlasmoidItem {
             prevRamDisplay = ramValue
             ramValue = 100.0 * used / memTotal
             ramUsedGB = used / 1024.0 / 1024.0
+            ramTotalGB = memTotal / 1024.0 / 1024.0
         }
     }
 
@@ -1412,16 +1560,18 @@ PlasmoidItem {
     function parseNetData(output) {
         var parts = output.split("|")
         var totalRx = parseFloat(parts[0]) || 0
-        netConnected = (parts[1] || "0").trim() === "1"
+        var totalTx = parseFloat(parts[1]) || 0
+        netConnected = (parts[2] || "").trim() === "1"
         if (!netFirstRun) {
-            var delta = totalRx - prevNetRxBytes
-            if (delta >= 0) {
-                var intervalSec = effectiveIntervalMs / 1000
-                netDownBytes = delta / intervalSec
-            }
+            var dr = totalRx - prevNetRxBytes
+            var dt = totalTx - prevNetTxBytes
+            var secs = effectiveIntervalMs / 1000.0
+            if (dr >= 0) netDownBytes = dr / secs
+            if (dt >= 0) netUpBytes = dt / secs
         }
-        netFirstRun = false
         prevNetRxBytes = totalRx
+        prevNetTxBytes = totalTx
+        netFirstRun = false
     }
 
     // ── Disk data source ─────────────────────────────────────────
@@ -1704,28 +1854,44 @@ PlasmoidItem {
                         if (ln.indexOf(sysNames[k]) === 0) return true
                     return false
                 }
-                var rows = output.split("\n"), all = []
+                // aggregate multi-process apps (chrome spawns one process per tab etc.)
+                var rows = output.split("\n"), agg = {}
                 for (var i = 1; i < rows.length; i++) {
                     var f = rows[i].trim().split(/\s+/)
-                    if (f.length >= 3 && parseFloat(f[f.length - 2]) > 0)
-                        all.push({name: f.slice(0, f.length - 2).join(" "), cpu: f[f.length - 2], mem: f[f.length - 1]})
+                    if (f.length < 4) continue
+                    var nm = f.slice(0, f.length - 3).join(" ")
+                    var e = agg[nm] || {name: nm, cpu: 0, mem: 0, rss: 0, n: 0}
+                    e.cpu += parseFloat(f[f.length - 3]) || 0
+                    e.mem += parseFloat(f[f.length - 2]) || 0
+                    e.rss += parseInt(f[f.length - 1]) || 0
+                    e.n += 1
+                    agg[nm] = e
                 }
-                var t3 = all.slice(0, 3)
-                var apps = []
-                for (var j = 0; j < all.length && apps.length < 3; j++) {
-                    if (isSystem(all[j].name)) continue
-                    var dup = false
-                    for (var m = 0; m < t3.length; m++) if (t3[m].name === all[j].name) dup = true
-                    if (!dup) apps.push(all[j])
+                var all = []
+                for (var key in agg) all.push(agg[key])
+                function disp(e) { return e.n > 1 ? e.name + " \u00D7" + e.n : e.name }
+                function cpuRow(e) { return {name: disp(e), v1: e.cpu.toFixed(1) + "%", v2: e.mem.toFixed(1) + "%"} }
+                function memRow(e) { return {name: disp(e), v1: e.mem.toFixed(1) + "%", v2: (e.rss / 1048576).toFixed(1) + "G"} }
+                function pick(list, mk, excl) {
+                    var out = []
+                    for (var j = 0; j < list.length && out.length < 3; j++) {
+                        if (excl && isSystem(list[j].name)) continue
+                        out.push(mk(list[j]))
+                    }
+                    return out
                 }
-                topProcs = t3
-                topApps = apps
+                all.sort(function(a, b) { return b.cpu - a.cpu })
+                topProcs = pick(all, cpuRow, false)
+                topApps = pick(all.filter(function(e) { return !isSystem(e.name) && topProcs.map(function(x){return x.name}).indexOf(disp(e)) < 0 }), cpuRow, false)
+                all.sort(function(a, b) { return b.mem - a.mem })
+                topMem = pick(all, memRow, false)
+                topMemApps = pick(all.filter(function(e) { return !isSystem(e.name) && topMem.map(function(x){return x.name}).indexOf(disp(e)) < 0 }), memRow, false)
             }
         }
     }
 
     function refreshProcs() {
-        procSource.connectSource("sh -c 'ps -eo comm,%cpu,%mem --sort=-%cpu | head -40'")
+        procSource.connectSource("sh -c 'ps -eo comm,%cpu,%mem,rss --sort=-%cpu | head -60'")
     }
 
     onExpandedChanged: {
@@ -1772,7 +1938,7 @@ PlasmoidItem {
         }
 
         if (showNet) {
-            netSource.connectSource("sh -c 'rx=$(awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); sum+=\\$2} END{print sum+0}\" /proc/net/dev); up=0; for iface in /sys/class/net/*; do n=$(basename $iface); [ \"$n\" != \"lo\" ] && s=$(cat $iface/operstate 2>/dev/null); [ \"$s\" = \"up\" ] && up=1; done; echo \"$rx|$up\"'")
+            netSource.connectSource("sh -c 'read rx tx <<< $(awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); r+=\\$2; t+=\\$10} END{print r+0, t+0}\" /proc/net/dev); up=0; for iface in /sys/class/net/*; do n=$(basename $iface); [ \"$n\" != \"lo\" ] && s=$(cat $iface/operstate 2>/dev/null); [ \"$s\" = \"up\" ] && up=1; done; echo \"$rx|$tx|$up\"'")
         }
 
         if (showDisk) {
