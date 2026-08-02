@@ -166,7 +166,7 @@ PlasmoidItem {
                     readonly property bool isOccupied: root.occupied[vdInfo.desktopIds[index]] === true
                     readonly property bool isCurrent: vdInfo.currentDesktop === vdInfo.desktopIds[index]
 
-                    width: 15
+                    width: 10
                     height: 7
                     radius: 0
                     color: isCurrent ? root.currentHex
