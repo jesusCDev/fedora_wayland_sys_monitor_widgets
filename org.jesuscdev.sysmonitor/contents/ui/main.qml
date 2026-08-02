@@ -964,9 +964,11 @@ PlasmoidItem {
         claudeLimits = newLimits
         claudePlan = obj.plan || ""
         claudeTier = obj.tier || ""
-        claudeFetchedAt = obj.fetched_at || (Date.now() / 1000)
-        claudeStale = obj.stale === true
-        claudeError = claudeStale ? (obj.error || "") : ""
+        claudeFetchedAt = obj.fetched_at || claudeFetchedAt
+        // Transient failures (429 bursts etc.) serve cache with stale:true;
+        // only gray out once data is >10 min old, so the panel doesn't flicker.
+        claudeStale = obj.stale === true && (Date.now() / 1000 - claudeFetchedAt) > 600
+        claudeError = obj.stale === true ? (obj.error || "") : ""
     }
 
     PlasmaSupport.DataSource {

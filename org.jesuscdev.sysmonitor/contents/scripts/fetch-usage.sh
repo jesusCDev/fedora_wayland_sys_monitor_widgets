@@ -11,9 +11,10 @@ fail() { # $1 = error name
     if [[ -s "$CACHE" ]]; then
         jq -n --argjson usage "$(cat "$CACHE")" \
             --arg err "$1" \
+            --argjson ft "$(stat -c %Y "$CACHE")" \
             --arg plan "$(jq -r '.claudeAiOauth.subscriptionType // ""' "$CREDS" 2>/dev/null)" \
             --arg tier "$(jq -r '.claudeAiOauth.rateLimitTier // ""' "$CREDS" 2>/dev/null)" \
-            '{ok:true, stale:true, error:$err, plan:$plan, tier:$tier, usage:$usage}' 2>/dev/null && exit 0
+            '{ok:true, stale:true, error:$err, fetched_at:$ft, plan:$plan, tier:$tier, usage:$usage}' 2>/dev/null && exit 0
     fi
     echo "{\"ok\":false,\"error\":\"$1\"}"
     exit 0
