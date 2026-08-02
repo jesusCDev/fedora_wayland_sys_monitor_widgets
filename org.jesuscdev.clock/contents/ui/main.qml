@@ -46,7 +46,8 @@ PlasmoidItem {
             id: clockText
             anchors.centerIn: parent
             textFormat: Text.RichText
-            font.pointSize: 10
+            font.pointSize: 12
+            font.bold: true
             verticalAlignment: Text.AlignVCenter
             text: root.clockHtml()
         }

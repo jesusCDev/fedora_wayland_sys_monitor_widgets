@@ -166,10 +166,10 @@ PlasmoidItem {
 
     // ── Claude usage colors (pastel) + helpers ──────────────────
     readonly property string claudeIconHex: "#D97757"    // Claude orange
-    readonly property string claudeOkHex: "#A5D6A7"      // pastel green
-    readonly property string claudeWarnHex: "#FFE082"    // pastel amber
+    readonly property string claudeOkHex: "#FFCC80"      // light orange — usage %
+    readonly property string claudeWarnHex: "#FF9E45"    // hot orange
     readonly property string claudeCritHex: "#EF9A9A"    // pastel red
-    readonly property string claudeResetHex: "#90CAF9"   // pastel blue — time-left, distinct from usage %
+    readonly property string claudeResetHex: "#90CAF9"   // pastel blue — time windows/resets, distinct from usage %
     readonly property string claudeDimHex: "#8A8A8A"
 
     function claudePctColor(p) {
@@ -215,14 +215,13 @@ PlasmoidItem {
         var s = claudeLimitByKind("session")
         var w = claudeLimitByKind("weekly_all")
         var parts = []
-        if (s) parts.push('<span style="color:' + claudeDimHex + ';">5h </span>'
+        if (s) parts.push('<span style="color:' + claudeResetHex + ';">5h </span>'
             + '<span style="color:' + claudePctColor(s.percent) + ';">' + fmtPct(s.percent) + '</span>')
-        if (w) parts.push('<span style="color:' + claudeDimHex + ';">7d </span>'
+        if (w) parts.push('<span style="color:' + claudeResetHex + ';">7d </span>'
             + '<span style="color:' + claudePctColor(w.percent) + ';">' + fmtPct(w.percent) + '</span>')
         var body = parts.length ? parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>')
                                 : '<span style="color:' + claudeDimHex + ';">…</span>'
-        var mark = claudeStale ? ' <span style="color:' + claudeDimHex + ';">&#x2717;</span>' : ''
-        return '<b>' + claudeIconHtml() + body + mark + '</b>'
+        return '<b>' + claudeIconHtml() + body + '</b>'
     }
 
     function ccToday() {
