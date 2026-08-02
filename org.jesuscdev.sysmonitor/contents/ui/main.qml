@@ -215,9 +215,7 @@ PlasmoidItem {
     }
 
     function claudeIconHtml() {
-        if (useIcons && faFont.status === FontLoader.Ready)
-            return faIcon('f069', claudeIconHex)
-        return '<span style="color:' + claudeIconHex + ';">&#x2739;</span> '
+        return '<img src="' + Qt.resolvedUrl("../icons/claude-spark.svg") + '" width="13" height="13"> '
     }
 
     function claudeItemHtml() {
@@ -234,13 +232,16 @@ PlasmoidItem {
     }
 
     // ── Codex (ChatGPT) helpers ─────────────────────────────────
+    // Own teal family so Codex reads apart from Claude's orange at a glance
     readonly property string codexIconHex: "#7FD8BE"     // pastel OpenAI teal
+    readonly property string codexOkHex: "#8FE3C8"       // light teal — usage %
+    readonly property string codexLabelHex: "#79A8B8"    // muted blue-teal — window labels
 
     function codexPctColor(p) {
         if (codexOld) return claudeDimHex
         if (p >= claudeCritThreshold) return claudeCritHex
         if (p >= claudeWarnThreshold) return claudeWarnHex
-        return claudeOkHex
+        return codexOkHex
     }
 
     function codexIconHtml() {
@@ -252,10 +253,10 @@ PlasmoidItem {
             return '<b>' + codexIconHtml() + '<span style="color:' + claudeDimHex + ';">…</span></b>'
         var parts = []
         if (codexSession)
-            parts.push('<span style="color:' + claudeResetHex + ';">5h </span>'
+            parts.push('<span style="color:' + codexLabelHex + ';">5h </span>'
                 + '<span style="color:' + codexPctColor(codexSession.used_percent || 0) + ';">' + fmtPct(codexSession.used_percent || 0) + '</span>')
         if (codexWeekly)
-            parts.push('<span style="color:' + claudeResetHex + ';">7d </span>'
+            parts.push('<span style="color:' + codexLabelHex + ';">7d </span>'
                 + '<span style="color:' + codexPctColor(codexWeekly.used_percent || 0) + ';">' + fmtPct(codexWeekly.used_percent || 0) + '</span>')
         return '<b>' + codexIconHtml() + parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>') + '</b>'
     }
@@ -597,6 +598,14 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.togglePopup("claude")
                     }
+                }
+
+                Text {  // soft divider between AI segments
+                    visible: root.showClaude && root.showCodex
+                    textFormat: Text.RichText
+                    font.pointSize: 10
+                    verticalAlignment: Text.AlignVCenter
+                    text: '<span style="color:#45484D;">&#x2502;</span>'
                 }
 
                 Text {
