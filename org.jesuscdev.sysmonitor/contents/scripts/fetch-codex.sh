@@ -10,6 +10,7 @@ set -u
 AUTH="$HOME/.codex/auth.json"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/codex-usage.json"
 THROTTLE=300
+[[ "${1:-}" == "force" ]] && THROTTLE=0
 
 cache_age() { echo $(( $(date +%s) - $(stat -c %Y "$CACHE" 2>/dev/null || echo 0) )); }
 

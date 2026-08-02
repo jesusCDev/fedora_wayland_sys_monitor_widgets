@@ -232,10 +232,12 @@ PlasmoidItem {
     }
 
     // ── Codex (ChatGPT) helpers ─────────────────────────────────
-    // Own teal family so Codex reads apart from Claude's orange at a glance
+    // Own teal family so Codex reads apart from Claude's orange at a glance.
+    // Same split as Claude: usage % in one hue, time windows/resets in another.
     readonly property string codexIconHex: "#7FD8BE"     // pastel OpenAI teal
     readonly property string codexOkHex: "#8FE3C8"       // light teal — usage %
-    readonly property string codexLabelHex: "#79A8B8"    // muted blue-teal — window labels
+    readonly property string codexLabelHex: "#B39DDB"    // pastel lavender — window labels
+    readonly property string codexResetHex: "#B39DDB"    // pastel lavender — reset countdowns
 
     function codexPctColor(p) {
         if (codexOld) return claudeDimHex
@@ -245,7 +247,20 @@ PlasmoidItem {
     }
 
     function codexIconHtml() {
-        return '<span style="color:' + codexIconHex + ';">&#x232C;</span> '
+        return '<img src="' + Qt.resolvedUrl("../icons/codex-knot.svg") + '" width="13" height="13"> '
+    }
+
+    property bool checking: false
+
+    function forceCheck() {
+        checking = true
+        claudeSource.connectSource("bash " + claudeScriptPath)
+        if (showCodex)
+            codexSource.connectSource("bash " + claudeScriptPath.replace("fetch-usage.sh", "fetch-codex.sh") + " force")
+        if (ccusageEnabled) {
+            ccFetchedAt = 0
+            refreshCcusage()
+        }
     }
 
     function codexItemHtml() {
@@ -259,6 +274,14 @@ PlasmoidItem {
             parts.push('<span style="color:' + codexLabelHex + ';">7d </span>'
                 + '<span style="color:' + codexPctColor(codexWeekly.used_percent || 0) + ';">' + fmtPct(codexWeekly.used_percent || 0) + '</span>')
         return '<b>' + codexIconHtml() + parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>') + '</b>'
+    }
+
+    function fmtAgo(epochSec) {
+        if (!epochSec) return "never"
+        var m = Math.floor((Date.now() / 1000 - epochSec) / 60)
+        if (m < 1) return "just now"
+        if (m < 60) return m + "m ago"
+        return Math.floor(m / 60) + "h " + (m % 60) + "m ago"
     }
 
     function codexAge() {
@@ -709,8 +732,8 @@ PlasmoidItem {
                 visible: root.popupMode === "claude"
                 textFormat: Text.RichText
                 text: root.claudeIconHtml()
-                    + '<b style="font-size:12pt; color:' + root.claudeIconHex + ';">Claude</b>'
-                    + (root.claudePlan ? ' <span style="color:' + root.claudeDimHex + ';">' + root.claudePlan
+                    + ' <b style="font-size:13pt; color:' + root.claudeIconHex + ';">Claude</b>'
+                    + (root.claudePlan ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">' + root.claudePlan
                         + (root.claudeTier ? ' (' + root.claudeTier + ')' : '') + '</span>' : '')
             }
             Text {
@@ -718,41 +741,20 @@ PlasmoidItem {
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.claudeWarnHex + ';">&#x26A0; cached data — ' + root.claudeError + '</span>'
             }
-            Repeater {
-                model: root.popupMode === "claude" ? root.claudeLimits : []
-                Text {
-                    textFormat: Text.RichText
-                    text: '<span style="font-size:12pt;"><span style="color:#FFFFFF;">' + root.claudeLimitLabel(modelData) + ':  </span>'
-                        + '<b><span style="color:' + root.claudePctColor(modelData.percent) + ';">' + Math.round(modelData.percent) + '%</span></b>'
-                        + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.claudeFmtReset(modelData.resets_at) + '</span></span>'
-                }
-            }
             Text {
-                visible: root.popupMode === "claude" && root.showCodex
-                textFormat: Text.RichText
-                text: root.codexIconHtml()
-                    + '<b style="font-size:12pt; color:' + root.codexIconHex + ';">Codex</b>'
-                    + (root.codexPlan ? ' <span style="color:' + root.claudeDimHex + ';">' + root.codexPlan + '</span>' : '')
-                    + (root.codexFetchedAt ? ' <span style="color:' + root.claudeDimHex + ';">— updated ' + root.codexAge() + '</span>' : '')
-            }
-            Text {
-                visible: root.popupMode === "claude" && root.showCodex
+                visible: root.popupMode === "claude" && root.claudeLimits.length > 0
                 textFormat: Text.RichText
                 text: {
-                    if (!root.codexWeekly && !root.codexSession)
-                        return '<span style="color:' + root.claudeDimHex + ';">No codex data</span>'
-                    var lines = []
-                    if (root.codexSession)
-                        lines.push('<span style="font-size:12pt;"><span style="color:#FFFFFF;">Session (5h):  </span>'
-                            + '<b><span style="color:' + root.codexPctColor(root.codexSession.used_percent || 0) + ';">'
-                            + Math.round(root.codexSession.used_percent || 0) + '%</span></b>'
-                            + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.fmtEpochReset(root.codexSession.resets_at) + '</span></span>')
-                    if (root.codexWeekly)
-                        lines.push('<span style="font-size:12pt;"><span style="color:#FFFFFF;">Weekly (account-wide):  </span>'
-                            + '<b><span style="color:' + root.codexPctColor(root.codexWeekly.used_percent || 0) + ';">'
-                            + Math.round(root.codexWeekly.used_percent || 0) + '%</span></b>'
-                            + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.fmtEpochReset(root.codexWeekly.resets_at) + '</span></span>')
-                    return lines.join('<br>')
+                    var rows = ''
+                    for (var i = 0; i < root.claudeLimits.length; i++) {
+                        var l = root.claudeLimits[i]
+                        rows += '<tr>'
+                            + '<td style="padding-right:22px;"><span style="font-size:12pt; color:#FFFFFF;">' + root.claudeLimitLabel(l) + '</span></td>'
+                            + '<td style="padding-right:22px;"><span style="font-size:12pt;"><b><span style="color:' + root.claudePctColor(l.percent) + ';">' + Math.round(l.percent) + '%</span></b></span></td>'
+                            + '<td><span style="font-size:11pt; color:' + root.claudeResetHex + ';">&#x21BB; ' + root.claudeFmtReset(l.resets_at) + '</span></td>'
+                            + '</tr>'
+                    }
+                    return '<table cellspacing="0" cellpadding="3">' + rows + '</table>'
                 }
             }
             Text {
@@ -761,13 +763,86 @@ PlasmoidItem {
                 text: {
                     var t = root.ccToday()
                     if (!t) return '<span style="color:' + root.claudeDimHex + ';">' + (root.ccRunning ? 'Loading local stats…' : 'No local stats') + '</span>'
-                    var lines = '<span style="color:#FFFFFF;"><b>Today:</b> $' + (t.totalCost || 0).toFixed(2)
-                        + ' &#183; ' + root.fmtTokens(t.totalTokens || 0) + ' tokens'
-                        + '<br><b>Last 7 days:</b> $' + root.ccWeekCost().toFixed(2) + '</span>'
+                    var rows = '<tr><td style="padding-right:22px;"><span style="color:#FFFFFF;"><b>Today</b></span></td>'
+                        + '<td><span style="color:#FFFFFF;">$' + (t.totalCost || 0).toFixed(2) + ' &#183; ' + root.fmtTokens(t.totalTokens || 0) + ' tokens</span></td></tr>'
+                        + '<tr><td style="padding-right:22px;"><span style="color:#FFFFFF;"><b>Last 7 days</b></span></td>'
+                        + '<td><span style="color:#FFFFFF;">$' + root.ccWeekCost().toFixed(2) + '</span></td></tr>'
                     var mb = t.modelBreakdowns || []
                     for (var i = 0; i < mb.length; i++)
-                        lines += '<br><span style="color:' + root.claudeDimHex + ';">&nbsp;&nbsp;' + mb[i].modelName + ': $' + (mb[i].cost || 0).toFixed(2) + '</span>'
-                    return lines
+                        rows += '<tr><td colspan="2"><span style="color:' + root.claudeDimHex + ';">&nbsp;&nbsp;' + mb[i].modelName + ': $' + (mb[i].cost || 0).toFixed(2) + '</span></td></tr>'
+                    return '<table cellspacing="0" cellpadding="2">' + rows + '</table>'
+                }
+            }
+
+            // ── Codex section ──
+            Rectangle {
+                visible: root.popupMode === "claude" && root.showCodex
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                Layout.bottomMargin: 4
+                height: 1
+                color: "#33888888"
+            }
+            Text {
+                visible: root.popupMode === "claude" && root.showCodex
+                textFormat: Text.RichText
+                text: root.codexIconHtml()
+                    + ' <b style="font-size:13pt; color:' + root.codexIconHex + ';">Codex</b>'
+                    + (root.codexPlan ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">' + root.codexPlan + '</span>' : '')
+                    + (root.codexFetchedAt ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">updated ' + root.codexAge() + '</span>' : '')
+            }
+            Text {
+                visible: root.popupMode === "claude" && root.showCodex
+                textFormat: Text.RichText
+                text: {
+                    if (!root.codexWeekly && !root.codexSession)
+                        return '<span style="color:' + root.claudeDimHex + ';">No codex data</span>'
+                    var rows = ''
+                    function row(label, pct, resets) {
+                        return '<tr>'
+                            + '<td style="padding-right:22px;"><span style="font-size:12pt; color:#FFFFFF;">' + label + '</span></td>'
+                            + '<td style="padding-right:22px;"><span style="font-size:12pt;"><b><span style="color:' + root.codexPctColor(pct) + ';">' + Math.round(pct) + '%</span></b></span></td>'
+                            + '<td><span style="font-size:11pt; color:' + root.codexResetHex + ';">&#x21BB; ' + root.fmtEpochReset(resets) + '</span></td>'
+                            + '</tr>'
+                    }
+                    if (root.codexSession)
+                        rows += row('Session (5h)', root.codexSession.used_percent || 0, root.codexSession.resets_at)
+                    if (root.codexWeekly)
+                        rows += row('Weekly (account)', root.codexWeekly.used_percent || 0, root.codexWeekly.resets_at)
+                    return '<table cellspacing="0" cellpadding="3">' + rows + '</table>'
+                }
+            }
+
+            // ── Footer: check button + freshness ──
+            Rectangle {
+                visible: root.popupMode === "claude"
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                height: 1
+                color: "#33888888"
+            }
+            RowLayout {
+                visible: root.popupMode === "claude"
+                Layout.fillWidth: true
+                spacing: 12
+
+                Text {
+                    textFormat: Text.RichText
+                    text: root.checking
+                        ? '<span style="color:' + root.claudeDimHex + ';">&#x27F3; Checking…</span>'
+                        : '<b><span style="color:' + root.claudeResetHex + ';">&#x27F3; Check now</span></b>'
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        enabled: !root.checking
+                        onClicked: root.forceCheck()
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    color: root.claudeDimHex
+                    font.pointSize: 8
+                    text: "Claude updated " + root.fmtAgo(root.claudeFetchedAt)
                 }
             }
         }
@@ -1048,6 +1123,7 @@ PlasmoidItem {
     }
 
     function parseClaudeUsage(output) {
+        checking = false
         var obj
         try { obj = JSON.parse(output) } catch (e) {
             claudeStale = true; claudeError = "bad output"; return
