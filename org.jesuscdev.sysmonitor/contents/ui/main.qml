@@ -556,7 +556,7 @@ PlasmoidItem {
         ? uptimeColorOverride : (brightColors ? uptimeHexBright : uptimeHexNormal)
 
     // ── Claude usage colors (pastel) + helpers ──────────────────
-    readonly property string claudeIconHex: "#D97757"    // Claude orange
+    readonly property string claudeIconHex: "#C15F3C"    // Claude crail (claude.ai accent)
     readonly property string claudeOkHex: "#FFCC80"      // light orange — usage %
     readonly property string claudeWarnHex: "#FF9E45"    // hot orange
     readonly property string claudeCritHex: "#EF9A9A"    // pastel red
