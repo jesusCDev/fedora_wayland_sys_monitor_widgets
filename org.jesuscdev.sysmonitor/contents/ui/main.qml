@@ -29,140 +29,169 @@ PlasmoidItem {
         return out.length ? out : ["Gathering…"]
     }
 
-    toolTipItem: Item {
-        implicitWidth: ttCol.implicitWidth + 28
-        implicitHeight: ttCol.implicitHeight + 24
+    // Suppress the built-in whole-applet tooltip; we anchor our own per segment
+    toolTipMainText: ""
+    toolTipSubText: ""
 
-        ColumnLayout {
-            id: ttCol
-            x: 14
-            y: 12
-            spacing: 5
+    PlasmaCore.Dialog {
+        id: hoverTip
+        type: PlasmaCore.Dialog.Tooltip
+        flags: Qt.WindowDoesNotAcceptFocus | Qt.ToolTip
+        location: Plasmoid.location
+        visualParent: root.hoverAnchor
+        visible: root.hoverSeg !== "" && root.hoverAnchor !== null && !root.expanded
 
-            Text {
-                font.bold: true
-                font.pointSize: 11
-                color: {
-                    switch (root.hoverSeg) {
-                    case "bat": return root.batHex
-                    case "cpu": return root.cpuHex
-                    case "gpu": return root.gpuHex
-                    case "ram": return root.ramHex
-                    case "net": return root.netHex
-                    case "disk": return root.diskHex
-                    case "uptime": return root.uptimeHex
-                    default: return root.claudeIconHex
+        mainItem: Item {
+            implicitWidth: ttFrame.implicitWidth
+            implicitHeight: ttFrame.implicitHeight
+
+            Rectangle {
+                id: ttFrame
+                implicitWidth: ttCol.implicitWidth + 32
+                implicitHeight: ttCol.implicitHeight + 28
+                color: "transparent"
+                border.color: "#30FFFFFF"
+                border.width: 1
+                radius: 8
+
+                ColumnLayout {
+                    id: ttCol
+                    x: 16
+                    y: 14
+                    spacing: 8
+
+                    Text {
+                        font.bold: true
+                        font.pointSize: 11
+                        color: {
+                            switch (root.hoverSeg) {
+                            case "bat": return root.batHex
+                            case "cpu": return root.cpuHex
+                            case "gpu": return root.gpuHex
+                            case "ram": return root.ramHex
+                            case "net": return root.netHex
+                            case "disk": return root.diskHex
+                            case "uptime": return root.uptimeHex
+                            default: return root.claudeIconHex
+                            }
+                        }
+                        text: {
+                            switch (root.hoverSeg) {
+                            case "bat": return "Battery " + Math.round(root.batValue) + "%"
+                            case "cpu": return "CPU " + root.fmt(root.cpuValue) + "%"
+                            case "gpu": return "GPU " + root.fmt(root.gpuValue) + "%"
+                            case "ram": return "RAM " + root.fmtRam().replace(/&nbsp;/g, "")
+                            case "net": return root.netConnected ? "Network ↓ " + root.fmtNetSpeed(root.netDownBytes).replace(/&nbsp;/g, "") : "Network — disconnected"
+                            case "disk": return "Storage " + Math.round(root.diskValue) + "%"
+                            case "uptime": return "System"
+                            default: return "AI Usage"
+                            }
+                        }
                     }
-                }
-                text: {
-                    switch (root.hoverSeg) {
-                    case "bat": return "Battery " + Math.round(root.batValue) + "%"
-                    case "cpu": return "CPU " + root.fmt(root.cpuValue) + "%"
-                    case "gpu": return "GPU " + root.fmt(root.gpuValue) + "%"
-                    case "ram": return "RAM " + root.fmtRam().replace(/&nbsp;/g, "")
-                    case "net": return root.netConnected ? "Network ↓ " + root.fmtNetSpeed(root.netDownBytes).replace(/&nbsp;/g, "") : "Network — disconnected"
-                    case "disk": return "Storage " + Math.round(root.diskValue) + "%"
-                    case "uptime": return "System"
-                    default: return "AI Usage"
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#22888888" }
+
+                    // Battery
+                    Text {
+                        visible: root.hoverSeg === "bat"
+                        color: "#FFFFFF"
+                        font.pointSize: 10
+                        text: (root.batPowerNow > 0 ? (root.batPowerNow / 1000000).toFixed(1) + "W draw" : "")
+                            + (root.fmtBatTime() ? (root.batPowerNow > 0 ? "   ·   " : "") + "~" + root.fmtBatTime() + (root.batCharging ? " until full" : " until empty") : "")
                     }
-                }
-            }
 
-            // Battery
-            Text {
-                visible: root.hoverSeg === "bat"
-                color: "#FFFFFF"
-                font.pointSize: 10
-                text: (root.batPowerNow > 0 ? (root.batPowerNow / 1000000).toFixed(1) + "W draw" : "")
-                    + (root.fmtBatTime() ? (root.batPowerNow > 0 ? "  ·  " : "") + "~" + root.fmtBatTime() + (root.batCharging ? " until full" : " until empty") : "")
-            }
-
-            // CPU/GPU/RAM/NET: top processes
-            Text {
-                visible: ["gpu", "net"].indexOf(root.hoverSeg) >= 0
-                color: root.claudeDimHex
-                font.pointSize: 8
-                text: root.hoverSeg === "gpu" ? "per-app GPU not exposed — CPU shown" : "per-app traffic needs root — CPU shown"
-            }
-            ProcTable {
-                visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topProcs.length > 0
-                title: "Top activity"
-                procs: root.topProcs
-            }
-            ProcTable {
-                visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topApps.length > 0
-                title: "Top apps"
-                procs: root.topApps
-            }
-
-            // Storage
-            RowLayout {
-                visible: root.hoverSeg === "disk" && root.diskTotalG > 0
-                spacing: 8
-                Item {
-                    Layout.preferredWidth: 110
-                    Layout.preferredHeight: 8
-                    Rectangle { anchors.fill: parent; radius: 2; color: "#22FFFFFF" }
-                    Rectangle {
-                        width: parent.width * Math.min(root.diskValue, 100) / 100
-                        height: parent.height
-                        radius: 2
-                        color: root.diskValue >= 90 ? root.claudeCritHex : root.diskHex
+                    // CPU/GPU/RAM/NET: top processes
+                    Text {
+                        visible: ["gpu", "net"].indexOf(root.hoverSeg) >= 0
+                        color: root.claudeDimHex
+                        font.pointSize: 8
+                        text: root.hoverSeg === "gpu" ? "per-app GPU not exposed — CPU shown" : "per-app traffic needs root — CPU shown"
                     }
-                }
-                Text { color: "#FFFFFF"; font.pointSize: 10; text: root.diskUsedG + "G / " + root.diskTotalG + "G" }
-            }
-
-            // Uptime
-            Text {
-                visible: root.hoverSeg === "uptime"
-                color: "#FFFFFF"
-                font.pointSize: 10
-                text: "Up " + root.fmtUptime(root.uptimeSecs).replace(/&nbsp;/g, "")
-            }
-            Text {
-                visible: root.hoverSeg === "uptime"
-                color: root.claudeDimHex
-                font.pointSize: 10
-                text: "Booted " + Qt.formatDateTime(new Date(Date.now() - root.uptimeSecs * 1000), "ddd MMM d, h:mm AP")
-            }
-
-            // AI summary (hovering Claude/Codex/$ or anywhere else)
-            GridLayout {
-                visible: root.hoverSeg === ""
-                columns: 2
-                columnSpacing: 14
-                rowSpacing: 2
-                Text { visible: root.showClaude; color: root.claudeIconHex; font.pointSize: 10; font.bold: true; text: "Claude" }
-                Text {
-                    visible: root.showClaude
-                    color: "#FFFFFF"; font.pointSize: 10
-                    text: {
-                        var se = root.claudeLimitByKind("session"), w = root.claudeLimitByKind("weekly_all")
-                        return (se ? "5h " + Math.round(se.percent) + "%" : "") + (se && w ? "  ·  " : "") + (w ? "7d " + Math.round(w.percent) + "%" : "")
+                    ProcTable {
+                        visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topProcs.length > 0
+                        title: "Top activity"
+                        procs: root.topProcs
                     }
-                }
-                Text { visible: root.showCodex && root.codexWeekly !== null; color: root.codexIconHex; font.pointSize: 10; font.bold: true; text: "Codex" }
-                Text {
-                    visible: root.showCodex && root.codexWeekly !== null
-                    color: "#FFFFFF"; font.pointSize: 10
-                    text: root.codexWeekly ? "7d " + Math.round(root.codexWeekly.used_percent || 0) + "%" : ""
-                }
-                Text { visible: root.ccusageEnabled && root.ccToday() !== null; color: "#B0BEC5"; font.pointSize: 10; font.bold: true; text: "Today" }
-                Text {
-                    visible: root.ccusageEnabled && root.ccToday() !== null
-                    color: "#FFFFFF"; font.pointSize: 10
-                    text: {
-                        var t = root.ccToday()
-                        return t ? "$" + (t.totalCost || 0).toFixed(2) + "  ·  " + root.fmtTokens(t.totalTokens || 0) + " tokens" : ""
+                    Item { visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topApps.length > 0; height: 2 }
+                    ProcTable {
+                        visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topApps.length > 0
+                        title: "Top apps"
+                        procs: root.topApps
+                    }
+
+                    // Storage
+                    RowLayout {
+                        visible: root.hoverSeg === "disk" && root.diskTotalG > 0
+                        spacing: 10
+                        Item {
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 8
+                            Rectangle { anchors.fill: parent; radius: 2; color: "#22FFFFFF" }
+                            Rectangle {
+                                width: parent.width * Math.min(root.diskValue, 100) / 100
+                                height: parent.height
+                                radius: 2
+                                color: root.diskValue >= 90 ? root.claudeCritHex : root.diskHex
+                            }
+                        }
+                        Text { color: "#FFFFFF"; font.pointSize: 10; text: root.diskUsedG + "G / " + root.diskTotalG + "G" }
+                    }
+
+                    // Uptime
+                    Text {
+                        visible: root.hoverSeg === "uptime"
+                        color: "#FFFFFF"
+                        font.pointSize: 10
+                        text: "Up " + root.fmtUptime(root.uptimeSecs).replace(/&nbsp;/g, "")
+                    }
+                    Text {
+                        visible: root.hoverSeg === "uptime"
+                        color: root.claudeDimHex
+                        font.pointSize: 10
+                        text: "Booted " + Qt.formatDateTime(new Date(Date.now() - root.uptimeSecs * 1000), "ddd MMM d, h:mm AP")
+                    }
+
+                    // AI summary
+                    GridLayout {
+                        visible: root.hoverSeg === "ai"
+                        columns: 2
+                        columnSpacing: 18
+                        rowSpacing: 5
+                        Text { visible: root.showClaude; color: root.claudeIconHex; font.pointSize: 10; font.bold: true; text: "Claude" }
+                        Text {
+                            visible: root.showClaude
+                            color: "#FFFFFF"; font.pointSize: 10
+                            text: {
+                                var se = root.claudeLimitByKind("session"), w = root.claudeLimitByKind("weekly_all")
+                                return (se ? "5h " + Math.round(se.percent) + "%" : "") + (se && w ? "   ·   " : "") + (w ? "7d " + Math.round(w.percent) + "%" : "")
+                            }
+                        }
+                        Text { visible: root.showCodex && root.codexWeekly !== null; color: root.codexIconHex; font.pointSize: 10; font.bold: true; text: "Codex" }
+                        Text {
+                            visible: root.showCodex && root.codexWeekly !== null
+                            color: "#FFFFFF"; font.pointSize: 10
+                            text: root.codexWeekly ? "7d " + Math.round(root.codexWeekly.used_percent || 0) + "%" : ""
+                        }
+                        Text { visible: root.ccusageEnabled && root.ccToday() !== null; color: "#B0BEC5"; font.pointSize: 10; font.bold: true; text: "Today" }
+                        Text {
+                            visible: root.ccusageEnabled && root.ccToday() !== null
+                            color: "#FFFFFF"; font.pointSize: 10
+                            text: {
+                                var t = root.ccToday()
+                                return t ? "$" + (t.totalCost || 0).toFixed(2) + "   ·   " + root.fmtTokens(t.totalTokens || 0) + " tokens" : ""
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    function segHovered(seg) {
+    property Item hoverAnchor: null
+
+    function segHovered(seg, item) {
         hoverSeg = seg
+        if (item !== undefined) hoverAnchor = item
         if (seg === "cpu" || seg === "gpu" || seg === "ram" || seg === "net")
             refreshProcs()
         else if (seg === "disk")
@@ -677,8 +706,8 @@ PlasmoidItem {
             else
                 bolt = ' <span style="color:#FFFFFF;">&#x26A1;</span>'
         }
-        var batTimeStr = showBatTime ? (' ' + fmtBatTime()) : ''
-        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', batIconUnicode(), batHex) + fmt(batValue) + '%' + batTimeStr + '</span></b>' + bolt
+        var batTimeStr = showBatTime && fmtBatTime() ? (' <span style="color:' + claudeDimHex + ';">' + fmtBatTime() + '</span>') : ''
+        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', batIconUnicode(), batHex) + fmt(batValue) + '%</span>' + batTimeStr + '</b>' + bolt
     }
 
     function batSepHtml() {
@@ -722,7 +751,7 @@ PlasmoidItem {
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
-                    onEntered: root.segHovered("bat")
+                    onEntered: root.segHovered("bat", parent)
                     onExited: root.hoverSeg = ""
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
@@ -749,7 +778,7 @@ PlasmoidItem {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: root.segHovered("cpu")
+                        onEntered: root.segHovered("cpu", parent)
                         onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("cpu")
@@ -772,7 +801,7 @@ PlasmoidItem {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: root.segHovered("gpu")
+                        onEntered: root.segHovered("gpu", parent)
                         onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("gpu")
@@ -794,7 +823,7 @@ PlasmoidItem {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: root.segHovered("ram")
+                        onEntered: root.segHovered("ram", parent)
                         onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("ram")
@@ -815,7 +844,7 @@ PlasmoidItem {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: root.segHovered("disk")
+                        onEntered: root.segHovered("disk", parent)
                         onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("disk")
@@ -836,7 +865,7 @@ PlasmoidItem {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: root.segHovered("uptime")
+                        onEntered: root.segHovered("uptime", parent)
                         onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("uptime")
@@ -858,7 +887,7 @@ PlasmoidItem {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: root.segHovered("net")
+                        onEntered: root.segHovered("net", parent)
                         onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("net")
@@ -877,6 +906,9 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onEntered: root.segHovered("ai", parent)
+                        onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.MiddleButton) root.launchApp("xdg-open https://claude.ai/settings/usage")
                             else root.togglePopup("claude")
@@ -902,6 +934,9 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onEntered: root.segHovered("ai", parent)
+                        onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.MiddleButton) root.launchApp("xdg-open https://chatgpt.com/codex/settings/usage")
                             else root.togglePopup("claude")
@@ -940,7 +975,7 @@ PlasmoidItem {
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
-                    onEntered: root.segHovered("bat")
+                    onEntered: root.segHovered("bat", parent)
                     onExited: root.hoverSeg = ""
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
@@ -953,17 +988,26 @@ PlasmoidItem {
 
     // ── Popup view ──────────────────────────────────────────────
     fullRepresentation: Item {
-        implicitWidth: popupLayout.implicitWidth + 40
-        implicitHeight: popupLayout.implicitHeight + 40
+        implicitWidth: popupLayout.implicitWidth + 44
+        implicitHeight: popupLayout.implicitHeight + 44
         Layout.preferredWidth: implicitWidth
         Layout.preferredHeight: implicitHeight
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 2
+            color: "transparent"
+            border.color: "#30FFFFFF"
+            border.width: 1
+            radius: 8
+        }
 
         ColumnLayout {
             id: popupLayout
             anchors.left: parent.left
             anchors.top: parent.top
-            anchors.margins: 20
-            spacing: 10
+            anchors.margins: 22
+            spacing: 12
 
             // ── System detail (only non-redundant info; panel already shows live metrics) ──
             Text {
