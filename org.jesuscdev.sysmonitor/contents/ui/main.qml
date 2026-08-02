@@ -11,21 +11,64 @@ PlasmoidItem {
     id: root
     preferredRepresentation: Plasmoid.compactRepresentation
 
-    // Hover tooltip: live summary instead of the useless title/description
+    // Hover tooltip: content depends on which segment the pointer is over
+    property string hoverSeg: ""
+
+    function procLines() {
+        var out = []
+        if (topProcs.length) {
+            var a = []
+            for (var i = 0; i < topProcs.length; i++) a.push(topProcs[i].name + " " + topProcs[i].cpu + "%")
+            out.push("Top:   " + a.join("  ·  "))
+        }
+        if (topApps.length) {
+            var b = []
+            for (var j = 0; j < topApps.length; j++) b.push(topApps[j].name + " " + topApps[j].cpu + "%")
+            out.push("Apps:  " + b.join("  ·  "))
+        }
+        return out.length ? out : ["Gathering…"]
+    }
+
     toolTipMainText: ""
     toolTipSubText: {
-        var lines = []
-        var s = claudeLimitByKind("session")
-        var w = claudeLimitByKind("weekly_all")
-        if (showClaude && (s || w))
-            lines.push("Claude   " + (s ? "5h " + Math.round(s.percent) + "%" : "")
-                + (s && w ? "  ·  " : "") + (w ? "7d " + Math.round(w.percent) + "%" : ""))
-        if (showCodex && codexWeekly)
-            lines.push("Codex    7d " + Math.round(codexWeekly.used_percent || 0) + "%")
-        var t = ccToday()
-        if (ccusageEnabled && t)
-            lines.push("Today    $" + (t.totalCost || 0).toFixed(2) + "  ·  " + fmtTokens(t.totalTokens || 0) + " tokens")
-        return lines.length ? lines.join("\n") : "Click for usage details"
+        switch (hoverSeg) {
+        case "bat": {
+            var l = ["Battery " + Math.round(batValue) + "%"
+                + (batPowerNow > 0 ? "  ·  " + (batPowerNow / 1000000).toFixed(1) + "W draw" : "")]
+            var tm = fmtBatTime()
+            if (tm) l.push(batCharging ? tm + " until full" : "~" + tm + " until empty")
+            return l.join("\n")
+        }
+        case "cpu": return ["CPU " + fmt(cpuValue) + "%"].concat(procLines()).join("\n")
+        case "gpu": return ["GPU " + fmt(gpuValue) + "%  (per-app GPU not exposed; CPU shown)"].concat(procLines()).join("\n")
+        case "ram": return ["RAM " + fmtRam().replace(/&nbsp;/g, "")].concat(procLines()).join("\n")
+        case "net": return [netConnected ? "Down " + fmtNetSpeed(netDownBytes).replace(/&nbsp;/g, "") : "Disconnected"].concat(procLines()).join("\n")
+        case "disk": return "Disk " + Math.round(diskValue) + "% used  ·  " + diskUsedG + "G of " + diskTotalG + "G"
+        case "uptime": {
+            var boot = new Date(Date.now() - uptimeSecs * 1000)
+            return "Up " + fmtUptime(uptimeSecs).replace(/&nbsp;/g, "") + "\nBooted " + Qt.formatDateTime(boot, "ddd MMM d, h:mm AP")
+        }
+        default: {
+            var lines = []
+            var se = claudeLimitByKind("session")
+            var w = claudeLimitByKind("weekly_all")
+            if (showClaude && (se || w))
+                lines.push("Claude   " + (se ? "5h " + Math.round(se.percent) + "%" : "")
+                    + (se && w ? "  ·  " : "") + (w ? "7d " + Math.round(w.percent) + "%" : ""))
+            if (showCodex && codexWeekly)
+                lines.push("Codex    7d " + Math.round(codexWeekly.used_percent || 0) + "%")
+            var t = ccToday()
+            if (ccusageEnabled && t)
+                lines.push("Today    $" + (t.totalCost || 0).toFixed(2) + "  ·  " + fmtTokens(t.totalTokens || 0) + " tokens")
+            return lines.length ? lines.join("\n") : "Click for usage details"
+        }
+        }
+    }
+
+    function segHovered(seg) {
+        hoverSeg = seg
+        if (seg === "cpu" || seg === "gpu" || seg === "ram" || seg === "net")
+            refreshProcs()
     }
 
     // Font Awesome
@@ -42,6 +85,8 @@ PlasmoidItem {
     property real gpuTemp: 0.0
     property real netDownBytes: 0.0  // bytes/sec download rate
     property real diskValue: 0.0
+    property int diskTotalG: 0
+    property int diskUsedG: 0
     property real uptimeSecs: 0.0
     property real batEnergyNow: 0.0
     property real batEnergyFull: 0.0
@@ -166,6 +211,30 @@ PlasmoidItem {
         return updateIntervalSec * 1000
     }
 
+    component LimitRow: RowLayout {
+        id: lr
+        property string label
+        property real pct: 0
+        property string barColor: "#FFFFFF"
+        property string resetTxt
+        property string resetColor: "#90CAF9"
+        spacing: 10
+        Text { text: lr.label; color: "#FFFFFF"; font.pointSize: 11; Layout.preferredWidth: 160; elide: Text.ElideRight }
+        Item {
+            Layout.preferredWidth: 110
+            Layout.preferredHeight: 8
+            Rectangle { anchors.fill: parent; radius: 2; color: "#22FFFFFF" }
+            Rectangle {
+                width: parent.width * Math.min(lr.pct, 100) / 100
+                height: parent.height
+                radius: 2
+                color: lr.barColor
+            }
+        }
+        Text { text: Math.round(lr.pct) + "%"; color: lr.barColor; font.bold: true; font.pointSize: 11; Layout.preferredWidth: 42; horizontalAlignment: Text.AlignRight }
+        Text { text: "\u21BB " + lr.resetTxt; color: lr.resetColor; font.pointSize: 10 }
+    }
+
     component ProcTable: GridLayout {
         id: pt
         property string title
@@ -173,7 +242,7 @@ PlasmoidItem {
         columns: 3
         rows: procs.length + 1
         flow: GridLayout.TopToBottom
-        columnSpacing: 24
+        columnSpacing: 16
         rowSpacing: 2
 
         Text { text: pt.title; color: "#B0BEC5"; font.bold: true; font.pointSize: 10 }
@@ -263,7 +332,7 @@ PlasmoidItem {
     function claudeFmtReset(iso) {
         if (!iso) return ""
         var ms = new Date(iso).getTime() - Date.now()
-        if (isNaN(ms) || ms <= 0) return "soon"
+        if (isNaN(ms) || ms <= 0) return "now"
         var m = Math.floor(ms / 60000)
         var d = Math.floor(m / 1440)
         var h = Math.floor((m % 1440) / 60)
@@ -302,6 +371,15 @@ PlasmoidItem {
         if (p >= claudeCritThreshold) return claudeCritHex
         if (p >= claudeWarnThreshold) return claudeWarnHex
         return codexOkHex
+    }
+
+    function codexRowsList() {
+        var out = []
+        if (codexSession) out.push({label: "Session (5h)", pct: codexSession.used_percent || 0, resets_at: codexSession.resets_at})
+        if (codexWeekly) out.push({label: "Weekly (account)", pct: codexWeekly.used_percent || 0, resets_at: codexWeekly.resets_at})
+        for (var i = 0; i < codexFeatures.length; i++)
+            out.push({label: codexFeatures[i].name, pct: codexFeatures[i].used_percent || 0, resets_at: codexFeatures[i].resets_at})
+        return out
     }
 
     function codexIconHtml() {
@@ -354,13 +432,13 @@ PlasmoidItem {
     function fmtEpochReset(epoch) {
         if (!epoch) return ""
         var ms = epoch * 1000 - Date.now()
-        if (ms <= 0) return "reset elapsed"
+        if (ms <= 0) return "now"
         var m = Math.floor(ms / 60000)
         var d = Math.floor(m / 1440)
         var h = Math.floor((m % 1440) / 60)
-        if (d > 0) return "resets in " + d + "d " + h + "h"
-        if (h > 0) return "resets in " + h + "h " + (m % 60) + "m"
-        return "resets in " + (m % 60) + "m"
+        if (d > 0) return d + "d " + h + "h"
+        if (h > 0) return h + "h " + (m % 60) + "m"
+        return (m % 60) + "m"
     }
 
     function ccToday() {
@@ -539,6 +617,9 @@ PlasmoidItem {
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onEntered: root.segHovered("bat")
+                    onExited: root.hoverSeg = ""
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
                         else root.launchApp(root.clickCommand)
@@ -563,6 +644,9 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onEntered: root.segHovered("cpu")
+                        onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("cpu")
                             else root.launchApp(root.clickCommand)
@@ -583,6 +667,9 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onEntered: root.segHovered("gpu")
+                        onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("gpu")
                             else root.launchApp(root.clickCommand)
@@ -602,6 +689,9 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onEntered: root.segHovered("ram")
+                        onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("ram")
                             else root.launchApp(root.clickCommand)
@@ -620,6 +710,9 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onEntered: root.segHovered("disk")
+                        onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("disk")
                             else root.launchApp(root.clickCommand)
@@ -638,6 +731,9 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onEntered: root.segHovered("uptime")
+                        onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("uptime")
                             else root.launchApp(root.clickCommand)
@@ -657,6 +753,9 @@ PlasmoidItem {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
+                        hoverEnabled: true
+                        onEntered: root.segHovered("net")
+                        onExited: root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.LeftButton) root.metricClicked("net")
                             else root.launchApp(root.clickCommand)
@@ -736,6 +835,9 @@ PlasmoidItem {
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+                    onEntered: root.segHovered("bat")
+                    onExited: root.hoverSeg = ""
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
                         else root.launchApp(root.clickCommand)
@@ -767,6 +869,35 @@ PlasmoidItem {
                     + (root.fmtBatTime() ? '<span style="color:#FFFFFF;">  ' + root.fmtBatTime() + (root.batCharging ? ' to full' : ' left') + '</span>' : '')
                     + (root.batPowerNow > 0 ? '<span style="color:' + root.claudeDimHex + ';">  &#183;  ' + (root.batPowerNow / 1000000).toFixed(1) + 'W draw</span>' : '')
                     + '</span>'
+            }
+
+            RowLayout {
+                visible: root.popupMode === "sys" && root.diskTotalG > 0
+                spacing: 10
+                Text { text: "Storage"; color: "#FFFFFF"; font.pointSize: 11; Layout.preferredWidth: 70 }
+                Item {
+                    Layout.preferredWidth: 120
+                    Layout.preferredHeight: 8
+                    Rectangle { anchors.fill: parent; radius: 2; color: "#22FFFFFF" }
+                    Rectangle {
+                        width: parent.width * Math.min(root.diskValue, 100) / 100
+                        height: parent.height
+                        radius: 2
+                        color: root.diskValue >= 90 ? root.claudeCritHex : root.diskHex
+                    }
+                }
+                Text {
+                    text: root.diskUsedG + "G / " + root.diskTotalG + "G  (" + Math.round(root.diskValue) + "%)"
+                    color: root.claudeDimHex
+                    font.pointSize: 10
+                }
+            }
+            Text {
+                visible: root.popupMode === "sys" && root.uptimeSecs > 0
+                color: root.claudeDimHex
+                font.pointSize: 10
+                text: "Booted " + Qt.formatDateTime(new Date(Date.now() - root.uptimeSecs * 1000), "ddd MMM d, h:mm AP")
+                    + "  ·  up " + root.fmtUptime(root.uptimeSecs).replace(/&nbsp;/g, "")
             }
 
             Rectangle {
@@ -810,20 +941,14 @@ PlasmoidItem {
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.claudeWarnHex + ';">&#x26A0; cached data — ' + root.claudeError + '</span>'
             }
-            Text {
-                visible: root.popupMode === "claude" && root.claudeLimits.length > 0
-                textFormat: Text.RichText
-                text: {
-                    var rows = ''
-                    for (var i = 0; i < root.claudeLimits.length; i++) {
-                        var l = root.claudeLimits[i]
-                        rows += '<tr>'
-                            + '<td style="padding-right:22px;"><span style="font-size:12pt; color:#FFFFFF;">' + root.claudeLimitLabel(l) + '</span></td>'
-                            + '<td style="padding-right:22px;"><span style="font-size:12pt;"><b><span style="color:' + root.claudePctColor(l.percent) + ';">' + Math.round(l.percent) + '%</span></b></span></td>'
-                            + '<td><span style="font-size:11pt; color:' + root.claudeResetHex + ';">&#x21BB; ' + root.claudeFmtReset(l.resets_at) + '</span></td>'
-                            + '</tr>'
-                    }
-                    return '<table cellspacing="0" cellpadding="3">' + rows + '</table>'
+            Repeater {
+                model: root.popupMode === "claude" ? root.claudeLimits : []
+                LimitRow {
+                    label: root.claudeLimitLabel(modelData)
+                    pct: modelData.percent
+                    barColor: root.claudePctColor(modelData.percent)
+                    resetTxt: root.claudeFmtReset(modelData.resets_at)
+                    resetColor: root.claudeResetHex
                 }
             }
             RowLayout {
@@ -874,28 +999,18 @@ PlasmoidItem {
                     + (root.codexFetchedAt ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">updated ' + root.codexAge() + '</span>' : '')
             }
             Text {
-                visible: root.popupMode === "claude" && root.showCodex
-                textFormat: Text.RichText
-                text: {
-                    if (!root.codexWeekly && !root.codexSession)
-                        return '<span style="color:' + root.claudeDimHex + ';">No codex data</span>'
-                    var rows = ''
-                    function row(label, pct, resets) {
-                        return '<tr>'
-                            + '<td style="padding-right:22px;"><span style="font-size:12pt; color:#FFFFFF;">' + label + '</span></td>'
-                            + '<td style="padding-right:22px;"><span style="font-size:12pt;"><b><span style="color:' + root.codexPctColor(pct) + ';">' + Math.round(pct) + '%</span></b></span></td>'
-                            + '<td><span style="font-size:11pt; color:' + root.codexResetHex + ';">&#x21BB; ' + root.fmtEpochReset(resets) + '</span></td>'
-                            + '</tr>'
-                    }
-                    if (root.codexSession)
-                        rows += row('Session (5h)', root.codexSession.used_percent || 0, root.codexSession.resets_at)
-                    if (root.codexWeekly)
-                        rows += row('Weekly (account)', root.codexWeekly.used_percent || 0, root.codexWeekly.resets_at)
-                    for (var i = 0; i < root.codexFeatures.length; i++) {
-                        var f = root.codexFeatures[i]
-                        rows += row(f.name, f.used_percent || 0, f.resets_at)
-                    }
-                    return '<table cellspacing="0" cellpadding="3">' + rows + '</table>'
+                visible: root.popupMode === "claude" && root.showCodex && !root.codexWeekly && !root.codexSession
+                color: root.claudeDimHex
+                text: "No codex data"
+            }
+            Repeater {
+                model: root.popupMode === "claude" && root.showCodex ? root.codexRowsList() : []
+                LimitRow {
+                    label: modelData.label
+                    pct: modelData.pct
+                    barColor: root.codexPctColor(modelData.pct)
+                    resetTxt: root.fmtEpochReset(modelData.resets_at)
+                    resetColor: root.codexResetHex
                 }
             }
             RowLayout {
@@ -1174,8 +1289,12 @@ PlasmoidItem {
                 var output = (buffers[source] || "").trim()
                 delete buffers[source]
                 disconnectSource(source)
-                var val = parseInt(output) || 0
-                diskValue = val
+                var f = output.split(/\s+/)
+                diskValue = parseInt(f[0]) || 0
+                if (f.length >= 3) {
+                    diskTotalG = parseInt(f[1]) || 0
+                    diskUsedG = parseInt(f[2]) || 0
+                }
             }
         }
     }
@@ -1469,6 +1588,9 @@ PlasmoidItem {
                 refreshHist()
             } else {
                 refreshProcs()
+                // storage + boot info shown in the popup regardless of panel toggles
+                diskSource.connectSource("sh -c \"df -BG / --output=pcent,size,used | tail -1 | tr -d '%G'\"")
+                uptimeSource.connectSource("sh -c \"awk '{print \\$1}' /proc/uptime\"")
             }
         }
     }
@@ -1506,7 +1628,7 @@ PlasmoidItem {
         }
 
         if (showDisk) {
-            diskSource.connectSource("sh -c \"df / --output=pcent | tail -1 | tr -d ' %'\"")
+            diskSource.connectSource("sh -c \"df -BG / --output=pcent,size,used | tail -1 | tr -d '%G'\"")
         }
 
         if (showUptime) {
