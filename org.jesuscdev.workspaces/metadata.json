@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "jesuscdev"
+            }
+        ],
+        "Category": "Windows and Tasks",
+        "Description": "Virtual desktop grid with per-column workflow colors and occupancy",
+        "Icon": "virtual-desktops",
+        "Id": "org.jesuscdev.workspaces",
+        "Name": "Workspace Grid",
+        "Version": "1.0.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
