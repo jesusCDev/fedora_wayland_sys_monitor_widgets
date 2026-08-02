@@ -7,7 +7,9 @@ ScrollView {
     id: root
 
     property string cfg_clickAction
+    property string cfg_widgetStyle
     property alias cfg_dimOccupied: dimCheck.checked
+    property alias cfg_columnNames: namesField.text
 
     Kirigami.FormLayout {
         width: root.availableWidth
@@ -15,6 +17,25 @@ ScrollView {
         Kirigami.Separator {
             Kirigami.FormData.isSection: true
             Kirigami.FormData.label: "Appearance"
+        }
+
+        RadioButton {
+            Kirigami.FormData.label: "Style:"
+            text: "3×3 grid"
+            checked: root.cfg_widgetStyle === "grid"
+            onToggled: if (checked) root.cfg_widgetStyle = "grid"
+        }
+
+        RadioButton {
+            text: "Beacon + minimap (big current-workspace label, tiny dot map)"
+            checked: root.cfg_widgetStyle === "minimap"
+            onToggled: if (checked) root.cfg_widgetStyle = "minimap"
+        }
+
+        TextField {
+            id: namesField
+            Kirigami.FormData.label: "Column names:"
+            placeholderText: "DEV,PER,MED"
         }
 
         CheckBox {

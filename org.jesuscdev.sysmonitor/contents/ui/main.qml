@@ -208,7 +208,7 @@ PlasmoidItem {
     function claudeIconHtml() {
         if (useIcons && faFont.status === FontLoader.Ready)
             return faIcon('f069', claudeIconHex)
-        return '<span style="color:' + claudeIconHex + ';">&#x273B;</span> '
+        return '<span style="color:' + claudeIconHex + ';">&#x2739;</span> '
     }
 
     function claudeItemHtml() {

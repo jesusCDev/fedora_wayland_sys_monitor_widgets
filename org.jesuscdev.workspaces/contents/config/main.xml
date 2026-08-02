@@ -11,5 +11,11 @@
         <entry name="dimOccupied" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="widgetStyle" type="String">
+            <default>grid</default>
+        </entry>
+        <entry name="columnNames" type="String">
+            <default>DEV,PER,MED</default>
+        </entry>
     </group>
 </kcfg>

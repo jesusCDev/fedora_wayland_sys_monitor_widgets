@@ -27,8 +27,10 @@ PlasmoidItem {
     function clockHtml() {
         var wd = Qt.formatDateTime(now, "ddd")
         var md = Qt.formatDateTime(now, "MMM d")
-        var t = Qt.formatDateTime(now, "h:mm")
-        var ap = Qt.formatDateTime(now, "AP")
+        // "h" is only 12-hour when AP appears in the same format string
+        var tap = Qt.formatDateTime(now, "h:mm AP").split(" ")
+        var t = tap[0]
+        var ap = tap[1] || ""
         return '<b>'
             + '<span style="color:' + weekdayHex + ';">' + wd + '</span> '
             + '<span style="color:' + dateHex + ';">' + md + '</span>'
