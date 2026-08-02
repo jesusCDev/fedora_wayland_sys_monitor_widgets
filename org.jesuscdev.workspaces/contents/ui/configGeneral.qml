@@ -7,9 +7,21 @@ ScrollView {
     id: root
 
     property string cfg_clickAction
+    property alias cfg_dimOccupied: dimCheck.checked
 
     Kirigami.FormLayout {
         width: root.availableWidth
+
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: "Appearance"
+        }
+
+        CheckBox {
+            id: dimCheck
+            Kirigami.FormData.label: "Colors:"
+            text: "Dim occupied workspaces (only current one pops)"
+        }
 
         Kirigami.Separator {
             Kirigami.FormData.isSection: true

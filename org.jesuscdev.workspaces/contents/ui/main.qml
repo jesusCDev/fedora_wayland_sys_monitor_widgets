@@ -17,6 +17,8 @@ PlasmoidItem {
 
     // "grid" = open KWin Grid View (4-finger swipe up); "switch" = jump to clicked desktop
     property string clickAction: Plasmoid.configuration.clickAction
+    // Mute occupied-cell colors so only the current desktop pops
+    property bool dimOccupied: Plasmoid.configuration.dimOccupied
 
     function openGridView() {
         switchSource.connectSource("qdbus org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut 'Grid View'")
@@ -97,9 +99,11 @@ PlasmoidItem {
                     width: 15
                     height: 7
                     radius: 0
-                    color: isCurrent ? root.currentHex : (isOccupied ? colHex : "transparent")
+                    color: isCurrent ? root.currentHex
+                         : isOccupied ? Qt.alpha(colHex, root.dimOccupied ? 0.35 : 1.0)
+                         : "transparent"
                     border.width: isCurrent ? 0 : 1
-                    border.color: Qt.alpha(colHex, isOccupied ? 1.0 : 0.4)
+                    border.color: Qt.alpha(colHex, isOccupied ? (root.dimOccupied ? 0.5 : 1.0) : 0.3)
 
                     MouseArea {
                         anchors.fill: parent

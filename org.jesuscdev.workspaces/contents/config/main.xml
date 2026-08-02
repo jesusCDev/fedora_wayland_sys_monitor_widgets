@@ -8,5 +8,8 @@
         <entry name="clickAction" type="String">
             <default>grid</default>
         </entry>
+        <entry name="dimOccupied" type="Bool">
+            <default>true</default>
+        </entry>
     </group>
 </kcfg>
