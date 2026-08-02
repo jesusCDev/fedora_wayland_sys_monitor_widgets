@@ -781,7 +781,7 @@ PlasmoidItem {
         if (hours < 0 || hours > 99) return ''
         var h = Math.floor(hours)
         var m = Math.round((hours - h) * 60)
-        if (h > 0) return h + 'h' + (m > 0 ? m + 'm' : '')
+        if (h > 0) return h + 'h' + (m > 0 ? ' ' + m + 'm' : '')
         return m + 'm'
     }
 
@@ -811,9 +811,11 @@ PlasmoidItem {
     }
 
     property string sysFocus: "cpu"
+    property bool sysPopupEnabled: Plasmoid.configuration.sysPopupEnabled
 
     function metricClicked(type) {
-        // Left-click opens the popup focused on that metric's detail
+        // Hover tooltips carry the detail; click popup is opt-in
+        if (!sysPopupEnabled) return
         if (expanded && popupMode === "sys" && sysFocus === type) { expanded = false; return }
         sysFocus = type
         popupMode = "sys"

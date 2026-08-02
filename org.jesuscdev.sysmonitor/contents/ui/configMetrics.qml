@@ -24,6 +24,7 @@ ScrollView {
     property alias cfg_showCodex: codexCheck.checked
     property alias cfg_notifyEnabled: notifyCheck.checked
     property alias cfg_showCostPanel: costPanelCheck.checked
+    property alias cfg_sysPopupEnabled: sysPopupCheck.checked
     property alias cfg_ccusagePath: ccusagePathField.text
 
     Kirigami.FormLayout {
@@ -148,6 +149,12 @@ ScrollView {
             id: costPanelCheck
             Kirigami.FormData.label: "Cost in panel:"
             text: "Show today's local spend ($) in the panel"
+        }
+
+        CheckBox {
+            id: sysPopupCheck
+            Kirigami.FormData.label: "Click popup:"
+            text: "Clicking a system metric opens its detail popup (hover shows it anyway)"
         }
 
         TextField {
