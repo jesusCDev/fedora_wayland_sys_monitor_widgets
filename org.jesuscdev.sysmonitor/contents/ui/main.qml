@@ -29,39 +29,135 @@ PlasmoidItem {
         return out.length ? out : ["Gathering…"]
     }
 
-    toolTipMainText: ""
-    toolTipSubText: {
-        switch (hoverSeg) {
-        case "bat": {
-            var l = ["Battery " + Math.round(batValue) + "%"
-                + (batPowerNow > 0 ? "  ·  " + (batPowerNow / 1000000).toFixed(1) + "W draw" : "")]
-            var tm = fmtBatTime()
-            if (tm) l.push(batCharging ? tm + " until full" : "~" + tm + " until empty")
-            return l.join("\n")
-        }
-        case "cpu": return ["CPU " + fmt(cpuValue) + "%"].concat(procLines()).join("\n")
-        case "gpu": return ["GPU " + fmt(gpuValue) + "%  (per-app GPU not exposed; CPU shown)"].concat(procLines()).join("\n")
-        case "ram": return ["RAM " + fmtRam().replace(/&nbsp;/g, "")].concat(procLines()).join("\n")
-        case "net": return [netConnected ? "Down " + fmtNetSpeed(netDownBytes).replace(/&nbsp;/g, "") : "Disconnected"].concat(procLines()).join("\n")
-        case "disk": return "Disk " + Math.round(diskValue) + "% used  ·  " + diskUsedG + "G of " + diskTotalG + "G"
-        case "uptime": {
-            var boot = new Date(Date.now() - uptimeSecs * 1000)
-            return "Up " + fmtUptime(uptimeSecs).replace(/&nbsp;/g, "") + "\nBooted " + Qt.formatDateTime(boot, "ddd MMM d, h:mm AP")
-        }
-        default: {
-            var lines = []
-            var se = claudeLimitByKind("session")
-            var w = claudeLimitByKind("weekly_all")
-            if (showClaude && (se || w))
-                lines.push("Claude   " + (se ? "5h " + Math.round(se.percent) + "%" : "")
-                    + (se && w ? "  ·  " : "") + (w ? "7d " + Math.round(w.percent) + "%" : ""))
-            if (showCodex && codexWeekly)
-                lines.push("Codex    7d " + Math.round(codexWeekly.used_percent || 0) + "%")
-            var t = ccToday()
-            if (ccusageEnabled && t)
-                lines.push("Today    $" + (t.totalCost || 0).toFixed(2) + "  ·  " + fmtTokens(t.totalTokens || 0) + " tokens")
-            return lines.length ? lines.join("\n") : "Click for usage details"
-        }
+    toolTipItem: Item {
+        implicitWidth: ttCol.implicitWidth + 28
+        implicitHeight: ttCol.implicitHeight + 24
+
+        ColumnLayout {
+            id: ttCol
+            x: 14
+            y: 12
+            spacing: 5
+
+            Text {
+                font.bold: true
+                font.pointSize: 11
+                color: {
+                    switch (root.hoverSeg) {
+                    case "bat": return root.batHex
+                    case "cpu": return root.cpuHex
+                    case "gpu": return root.gpuHex
+                    case "ram": return root.ramHex
+                    case "net": return root.netHex
+                    case "disk": return root.diskHex
+                    case "uptime": return root.uptimeHex
+                    default: return root.claudeIconHex
+                    }
+                }
+                text: {
+                    switch (root.hoverSeg) {
+                    case "bat": return "Battery " + Math.round(root.batValue) + "%"
+                    case "cpu": return "CPU " + root.fmt(root.cpuValue) + "%"
+                    case "gpu": return "GPU " + root.fmt(root.gpuValue) + "%"
+                    case "ram": return "RAM " + root.fmtRam().replace(/&nbsp;/g, "")
+                    case "net": return root.netConnected ? "Network ↓ " + root.fmtNetSpeed(root.netDownBytes).replace(/&nbsp;/g, "") : "Network — disconnected"
+                    case "disk": return "Storage " + Math.round(root.diskValue) + "%"
+                    case "uptime": return "System"
+                    default: return "AI Usage"
+                    }
+                }
+            }
+
+            // Battery
+            Text {
+                visible: root.hoverSeg === "bat"
+                color: "#FFFFFF"
+                font.pointSize: 10
+                text: (root.batPowerNow > 0 ? (root.batPowerNow / 1000000).toFixed(1) + "W draw" : "")
+                    + (root.fmtBatTime() ? (root.batPowerNow > 0 ? "  ·  " : "") + "~" + root.fmtBatTime() + (root.batCharging ? " until full" : " until empty") : "")
+            }
+
+            // CPU/GPU/RAM/NET: top processes
+            Text {
+                visible: ["gpu", "net"].indexOf(root.hoverSeg) >= 0
+                color: root.claudeDimHex
+                font.pointSize: 8
+                text: root.hoverSeg === "gpu" ? "per-app GPU not exposed — CPU shown" : "per-app traffic needs root — CPU shown"
+            }
+            ProcTable {
+                visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topProcs.length > 0
+                title: "Top activity"
+                procs: root.topProcs
+            }
+            ProcTable {
+                visible: ["cpu", "gpu", "ram", "net"].indexOf(root.hoverSeg) >= 0 && root.topApps.length > 0
+                title: "Top apps"
+                procs: root.topApps
+            }
+
+            // Storage
+            RowLayout {
+                visible: root.hoverSeg === "disk" && root.diskTotalG > 0
+                spacing: 8
+                Item {
+                    Layout.preferredWidth: 110
+                    Layout.preferredHeight: 8
+                    Rectangle { anchors.fill: parent; radius: 2; color: "#22FFFFFF" }
+                    Rectangle {
+                        width: parent.width * Math.min(root.diskValue, 100) / 100
+                        height: parent.height
+                        radius: 2
+                        color: root.diskValue >= 90 ? root.claudeCritHex : root.diskHex
+                    }
+                }
+                Text { color: "#FFFFFF"; font.pointSize: 10; text: root.diskUsedG + "G / " + root.diskTotalG + "G" }
+            }
+
+            // Uptime
+            Text {
+                visible: root.hoverSeg === "uptime"
+                color: "#FFFFFF"
+                font.pointSize: 10
+                text: "Up " + root.fmtUptime(root.uptimeSecs).replace(/&nbsp;/g, "")
+            }
+            Text {
+                visible: root.hoverSeg === "uptime"
+                color: root.claudeDimHex
+                font.pointSize: 10
+                text: "Booted " + Qt.formatDateTime(new Date(Date.now() - root.uptimeSecs * 1000), "ddd MMM d, h:mm AP")
+            }
+
+            // AI summary (hovering Claude/Codex/$ or anywhere else)
+            GridLayout {
+                visible: root.hoverSeg === ""
+                columns: 2
+                columnSpacing: 14
+                rowSpacing: 2
+                Text { visible: root.showClaude; color: root.claudeIconHex; font.pointSize: 10; font.bold: true; text: "Claude" }
+                Text {
+                    visible: root.showClaude
+                    color: "#FFFFFF"; font.pointSize: 10
+                    text: {
+                        var se = root.claudeLimitByKind("session"), w = root.claudeLimitByKind("weekly_all")
+                        return (se ? "5h " + Math.round(se.percent) + "%" : "") + (se && w ? "  ·  " : "") + (w ? "7d " + Math.round(w.percent) + "%" : "")
+                    }
+                }
+                Text { visible: root.showCodex && root.codexWeekly !== null; color: root.codexIconHex; font.pointSize: 10; font.bold: true; text: "Codex" }
+                Text {
+                    visible: root.showCodex && root.codexWeekly !== null
+                    color: "#FFFFFF"; font.pointSize: 10
+                    text: root.codexWeekly ? "7d " + Math.round(root.codexWeekly.used_percent || 0) + "%" : ""
+                }
+                Text { visible: root.ccusageEnabled && root.ccToday() !== null; color: "#B0BEC5"; font.pointSize: 10; font.bold: true; text: "Today" }
+                Text {
+                    visible: root.ccusageEnabled && root.ccToday() !== null
+                    color: "#FFFFFF"; font.pointSize: 10
+                    text: {
+                        var t = root.ccToday()
+                        return t ? "$" + (t.totalCost || 0).toFixed(2) + "  ·  " + root.fmtTokens(t.totalTokens || 0) + " tokens" : ""
+                    }
+                }
+            }
         }
     }
 
@@ -69,6 +165,10 @@ PlasmoidItem {
         hoverSeg = seg
         if (seg === "cpu" || seg === "gpu" || seg === "ram" || seg === "net")
             refreshProcs()
+        else if (seg === "disk")
+            diskSource.connectSource("sh -c \"df -BG / --output=pcent,size,used | tail -1 | tr -d '%G'\"")
+        else if (seg === "uptime")
+            uptimeSource.connectSource("sh -c \"awk '{print \\$1}' /proc/uptime\"")
     }
 
     // Font Awesome
@@ -555,10 +655,14 @@ PlasmoidItem {
             launchSource.connectSource("sh -c '" + cmd + " &'")
     }
 
+    property string sysFocus: "cpu"
+
     function metricClicked(type) {
-        // Left-click = detail popup with top processes; middle-click still toggles it too.
-        // Old launcher actions move to the popup being open + external tools if wanted.
-        togglePopup("sys")
+        // Left-click opens the popup focused on that metric's detail
+        if (expanded && popupMode === "sys" && sysFocus === type) { expanded = false; return }
+        sysFocus = type
+        popupMode = "sys"
+        expanded = true
     }
 
     // Helper: are any system metrics visible?
@@ -863,7 +967,7 @@ PlasmoidItem {
 
             // ── System detail (only non-redundant info; panel already shows live metrics) ──
             Text {
-                visible: root.popupMode === "sys" && root.showBat && root.batValue >= 0
+                visible: root.popupMode === "sys" && root.sysFocus === "bat" && root.batValue >= 0
                 textFormat: Text.RichText
                 text: '<span style="font-size:12pt;"><b><span style="color:' + root.batHex + ';">Battery ' + root.fmt(root.batValue) + '%</span></b>'
                     + (root.fmtBatTime() ? '<span style="color:#FFFFFF;">  ' + root.fmtBatTime() + (root.batCharging ? ' to full' : ' left') + '</span>' : '')
@@ -872,7 +976,7 @@ PlasmoidItem {
             }
 
             RowLayout {
-                visible: root.popupMode === "sys" && root.diskTotalG > 0
+                visible: root.popupMode === "sys" && root.sysFocus === "disk" && root.diskTotalG > 0
                 spacing: 10
                 Text { text: "Storage"; color: "#FFFFFF"; font.pointSize: 11; Layout.preferredWidth: 70 }
                 Item {
@@ -893,7 +997,7 @@ PlasmoidItem {
                 }
             }
             Text {
-                visible: root.popupMode === "sys" && root.uptimeSecs > 0
+                visible: root.popupMode === "sys" && root.sysFocus === "uptime" && root.uptimeSecs > 0
                 color: root.claudeDimHex
                 font.pointSize: 10
                 text: "Booted " + Qt.formatDateTime(new Date(Date.now() - root.uptimeSecs * 1000), "ddd MMM d, h:mm AP")
@@ -901,7 +1005,7 @@ PlasmoidItem {
             }
 
             Rectangle {
-                visible: root.popupMode === "sys" && root.topProcs.length > 0
+                visible: false
                 Layout.fillWidth: true
                 Layout.topMargin: 2
                 Layout.bottomMargin: 2
@@ -909,12 +1013,12 @@ PlasmoidItem {
                 color: "#33888888"
             }
             ProcTable {
-                visible: root.popupMode === "sys" && root.topProcs.length > 0
+                visible: root.popupMode === "sys" && ["cpu", "gpu", "ram", "net"].indexOf(root.sysFocus) >= 0 && root.topProcs.length > 0
                 title: "Top activity"
                 procs: root.topProcs
             }
             Rectangle {
-                visible: root.popupMode === "sys" && root.topApps.length > 0
+                visible: false
                 Layout.fillWidth: true
                 Layout.topMargin: 2
                 Layout.bottomMargin: 2
@@ -922,7 +1026,7 @@ PlasmoidItem {
                 color: "#33888888"
             }
             ProcTable {
-                visible: root.popupMode === "sys" && root.topApps.length > 0
+                visible: root.popupMode === "sys" && ["cpu", "gpu", "ram", "net"].indexOf(root.sysFocus) >= 0 && root.topApps.length > 0
                 title: "Top apps"
                 procs: root.topApps
             }
