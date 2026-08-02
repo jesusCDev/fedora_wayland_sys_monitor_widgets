@@ -91,12 +91,14 @@ PlasmoidItem {
     property double ccFetchedAt: 0       // epoch ms
     property bool ccRunning: false
 
-    // Codex/ChatGPT usage state (from last codex run's session log)
+    // Codex/ChatGPT usage state: weekly from free wham/usage endpoint (account-wide,
+    // covers other machines); optional 5h window from local session logs
     property bool showCodex: Plasmoid.configuration.showCodex
-    property var codexPrimary: null
-    property var codexSecondary: null
-    property double codexFetchedAt: 0    // epoch seconds of the rate_limits event
-    readonly property bool codexOld: codexFetchedAt > 0 && (Date.now() / 1000 - codexFetchedAt) > 6 * 3600
+    property var codexWeekly: null       // {used_percent, resets_at, fetched_at}
+    property var codexSession: null      // {used_percent, resets_at, fetched_at} or null
+    property string codexPlan: ""
+    readonly property double codexFetchedAt: codexWeekly ? codexWeekly.fetched_at : 0
+    readonly property bool codexOld: codexFetchedAt > 0 && (Date.now() / 1000 - codexFetchedAt) > 1800
 
     // Which section the popup shows: "sys" (middle-click on metrics) or "claude" (click Claude segment)
     property string popupMode: "sys"
@@ -246,24 +248,25 @@ PlasmoidItem {
     }
 
     function codexItemHtml() {
-        if (!codexPrimary) return '<b>' + codexIconHtml() + '<span style="color:' + claudeDimHex + ';">…</span></b>'
-        var p = codexPrimary.used_percent || 0
-        var s = codexSecondary ? (codexSecondary.used_percent || 0) : null
-        var html = '<span style="color:' + claudeResetHex + ';">5h </span>'
-            + '<span style="color:' + codexPctColor(p) + ';">' + fmtPct(p) + '</span>'
-        if (s !== null)
-            html += '<span style="color:' + claudeDimHex + ';">&#183; </span>'
-                + '<span style="color:' + claudeResetHex + ';">7d </span>'
-                + '<span style="color:' + codexPctColor(s) + ';">' + fmtPct(s) + '</span>'
-        return '<b>' + codexIconHtml() + html + '</b>'
+        if (!codexWeekly && !codexSession)
+            return '<b>' + codexIconHtml() + '<span style="color:' + claudeDimHex + ';">…</span></b>'
+        var parts = []
+        if (codexSession)
+            parts.push('<span style="color:' + claudeResetHex + ';">5h </span>'
+                + '<span style="color:' + codexPctColor(codexSession.used_percent || 0) + ';">' + fmtPct(codexSession.used_percent || 0) + '</span>')
+        if (codexWeekly)
+            parts.push('<span style="color:' + claudeResetHex + ';">7d </span>'
+                + '<span style="color:' + codexPctColor(codexWeekly.used_percent || 0) + ';">' + fmtPct(codexWeekly.used_percent || 0) + '</span>')
+        return '<b>' + codexIconHtml() + parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>') + '</b>'
     }
 
     function codexAge() {
         if (!codexFetchedAt) return ""
-        var h = Math.floor((Date.now() / 1000 - codexFetchedAt) / 3600)
-        if (h < 1) return "just now"
-        if (h < 48) return h + "h ago"
-        return Math.floor(h / 24) + "d ago"
+        var m = Math.floor((Date.now() / 1000 - codexFetchedAt) / 60)
+        if (m < 2) return "just now"
+        if (m < 120) return m + "m ago"
+        if (m < 2880) return Math.floor(m / 60) + "h ago"
+        return Math.floor(m / 1440) + "d ago"
     }
 
     function fmtEpochReset(epoch) {
@@ -720,24 +723,27 @@ PlasmoidItem {
                 textFormat: Text.RichText
                 text: root.codexIconHtml()
                     + '<b style="font-size:12pt; color:' + root.codexIconHex + ';">Codex</b>'
-                    + (root.codexFetchedAt ? ' <span style="color:' + root.claudeDimHex + ';">as of last run ' + root.codexAge() + '</span>' : '')
+                    + (root.codexPlan ? ' <span style="color:' + root.claudeDimHex + ';">' + root.codexPlan + '</span>' : '')
+                    + (root.codexFetchedAt ? ' <span style="color:' + root.claudeDimHex + ';">— updated ' + root.codexAge() + '</span>' : '')
             }
             Text {
                 visible: root.popupMode === "claude" && root.showCodex
                 textFormat: Text.RichText
                 text: {
-                    if (!root.codexPrimary)
-                        return '<span style="color:' + root.claudeDimHex + ';">No codex session data</span>'
-                    var out = '<span style="font-size:12pt;"><span style="color:#FFFFFF;">Session (5h):  </span>'
-                        + '<b><span style="color:' + root.codexPctColor(root.codexPrimary.used_percent || 0) + ';">'
-                        + Math.round(root.codexPrimary.used_percent || 0) + '%</span></b>'
-                        + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.fmtEpochReset(root.codexPrimary.resets_at) + '</span></span>'
-                    if (root.codexSecondary)
-                        out += '<br><span style="font-size:12pt;"><span style="color:#FFFFFF;">Weekly:  </span>'
-                            + '<b><span style="color:' + root.codexPctColor(root.codexSecondary.used_percent || 0) + ';">'
-                            + Math.round(root.codexSecondary.used_percent || 0) + '%</span></b>'
-                            + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.fmtEpochReset(root.codexSecondary.resets_at) + '</span></span>'
-                    return out
+                    if (!root.codexWeekly && !root.codexSession)
+                        return '<span style="color:' + root.claudeDimHex + ';">No codex data</span>'
+                    var lines = []
+                    if (root.codexSession)
+                        lines.push('<span style="font-size:12pt;"><span style="color:#FFFFFF;">Session (5h):  </span>'
+                            + '<b><span style="color:' + root.codexPctColor(root.codexSession.used_percent || 0) + ';">'
+                            + Math.round(root.codexSession.used_percent || 0) + '%</span></b>'
+                            + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.fmtEpochReset(root.codexSession.resets_at) + '</span></span>')
+                    if (root.codexWeekly)
+                        lines.push('<span style="font-size:12pt;"><span style="color:#FFFFFF;">Weekly (account-wide):  </span>'
+                            + '<b><span style="color:' + root.codexPctColor(root.codexWeekly.used_percent || 0) + ';">'
+                            + Math.round(root.codexWeekly.used_percent || 0) + '%</span></b>'
+                            + '  <span style="color:' + root.claudeResetHex + ';">&#x21BB; ' + root.fmtEpochReset(root.codexWeekly.resets_at) + '</span></span>')
+                    return lines.join('<br>')
                 }
             }
             Text {
@@ -1108,9 +1114,9 @@ PlasmoidItem {
                 try {
                     var obj = JSON.parse(output)
                     if (obj.ok) {
-                        root.codexPrimary = obj.primary || null
-                        root.codexSecondary = obj.secondary || null
-                        root.codexFetchedAt = obj.fetched_at || 0
+                        root.codexWeekly = obj.weekly || null
+                        root.codexSession = obj.session5h || null
+                        root.codexPlan = obj.plan || ""
                     }
                 } catch (e) { /* keep old data */ }
             }
