@@ -124,7 +124,8 @@ PlasmoidItem {
     property real prevSessionPct: -1
     property var claudeHist: []   // [{t, p}] session % samples, last 24h shown
     property var codexHist: []    // [{t, p}] weekly % samples
-    property var topProcs: []     // [{name, cpu, mem}] fetched only on sys-popup open
+    property var topProcs: []     // top 3 by CPU, any process — fetched only on sys-popup open
+    property var topApps: []      // top 3 excluding system/background processes
 
     function notify(title, body) {
         launchSource.connectSource('notify-send -a "AI Usage" -i office-chart-line "' + title + '" "' + body + '"')
@@ -163,6 +164,33 @@ PlasmoidItem {
         if (batteryModeEnabled && batValue >= 0 && !batCharging)
             return batteryModeInterval * 1000
         return updateIntervalSec * 1000
+    }
+
+    component ProcTable: GridLayout {
+        id: pt
+        property string title
+        property var procs: []
+        columns: 3
+        rows: procs.length + 1
+        flow: GridLayout.TopToBottom
+        columnSpacing: 24
+        rowSpacing: 2
+
+        Text { text: pt.title; color: "#B0BEC5"; font.bold: true; font.pointSize: 10 }
+        Repeater {
+            model: pt.procs
+            Text { text: modelData.name; color: "#FFFFFF"; font.pointSize: 10 }
+        }
+        Text { text: "CPU"; color: root.claudeDimHex; font.pointSize: 9 }
+        Repeater {
+            model: pt.procs
+            Text { text: modelData.cpu + "%"; color: root.cpuHex; font.pointSize: 10; Layout.alignment: Qt.AlignRight }
+        }
+        Text { text: "MEM"; color: root.claudeDimHex; font.pointSize: 9 }
+        Repeater {
+            model: pt.procs
+            Text { text: modelData.mem + "%"; color: root.ramHex; font.pointSize: 10; Layout.alignment: Qt.AlignRight }
+        }
     }
 
     // ── Color definitions ───────────────────────────────────────
@@ -731,77 +759,41 @@ PlasmoidItem {
             anchors.margins: 20
             spacing: 10
 
-            Text {
-                visible: root.popupMode === "sys"
-                textFormat: Text.RichText
-                text: '<b style="font-size:14pt;">System Monitor</b>'
-                color: "#FFFFFF"
-            }
-            Text {
-                visible: root.popupMode === "sys" && root.showCpu
-                textFormat: Text.RichText
-                text: '<span style="color:' + root.cpuHex + '; font-size:12pt;"><b>CPU:  ' + root.fmt(root.cpuValue) + '%'
-                    + (root.showCpuTemp && root.cpuTemp > 0 ? '  ' + Math.round(root.cpuTemp) + '°C' : '') + '</b></span>'
-            }
-            Text {
-                visible: root.popupMode === "sys" && root.showGpu
-                textFormat: Text.RichText
-                text: '<span style="color:' + root.gpuHex + '; font-size:12pt;"><b>GPU:  ' + root.fmt(root.gpuValue) + '%'
-                    + (root.showGpuTemp && root.gpuTemp > 0 ? '  ' + Math.round(root.gpuTemp) + '°C' : '') + '</b></span>'
-            }
-            Text {
-                visible: root.popupMode === "sys" && root.showRam
-                textFormat: Text.RichText
-                text: '<span style="color:' + root.ramHex + '; font-size:12pt;"><b>RAM:  ' + root.fmtRam() + '</b></span>'
-            }
-            Text {
-                visible: root.popupMode === "sys" && root.showNet
-                textFormat: Text.RichText
-                text: '<span style="color:' + root.netHex + '; font-size:12pt;"><b>NET:  '
-                    + (root.netConnected ? root.fmtNetSpeed(root.netDownBytes) : 'Disconnected') + '</b></span>'
-            }
-            Text {
-                visible: root.popupMode === "sys" && root.showDisk
-                textFormat: Text.RichText
-                text: '<span style="color:' + root.diskHex + '; font-size:12pt;"><b>DISK:  ' + root.fmt(root.diskValue) + '%</b></span>'
-            }
-            Text {
-                visible: root.popupMode === "sys" && root.showUptime
-                textFormat: Text.RichText
-                text: '<span style="color:' + root.uptimeHex + '; font-size:12pt;"><b>UP:  ' + root.fmtUptime(root.uptimeSecs) + '</b></span>'
-            }
+            // ── System detail (only non-redundant info; panel already shows live metrics) ──
             Text {
                 visible: root.popupMode === "sys" && root.showBat && root.batValue >= 0
                 textFormat: Text.RichText
-                text: '<span style="color:' + root.batHex + '; font-size:12pt;"><b>BAT:  ' + root.fmt(root.batValue) + '%'
-                    + (root.fmtBatTime() ? '  ' + root.fmtBatTime() + (root.batCharging ? ' to full' : ' left') : '')
-                    + (root.batPowerNow > 0 ? '  &#183; ' + (root.batPowerNow / 1000000).toFixed(1) + 'W' : '') + '</b></span>'
-                    + ((root.showChargingIcon && root.batCharging) ? ' <span style="font-family:\'' + faFont.name + '\'; color:#FFFFFF; font-size:12pt;">&#xf0e7;</span>' : '')
+                text: '<span style="font-size:12pt;"><b><span style="color:' + root.batHex + ';">Battery ' + root.fmt(root.batValue) + '%</span></b>'
+                    + (root.fmtBatTime() ? '<span style="color:#FFFFFF;">  ' + root.fmtBatTime() + (root.batCharging ? ' to full' : ' left') + '</span>' : '')
+                    + (root.batPowerNow > 0 ? '<span style="color:' + root.claudeDimHex + ';">  &#183;  ' + (root.batPowerNow / 1000000).toFixed(1) + 'W draw</span>' : '')
+                    + '</span>'
             }
+
             Rectangle {
                 visible: root.popupMode === "sys" && root.topProcs.length > 0
                 Layout.fillWidth: true
-                Layout.topMargin: 4
-                Layout.bottomMargin: 4
+                Layout.topMargin: 2
+                Layout.bottomMargin: 2
                 height: 1
                 color: "#33888888"
             }
-            Text {
+            ProcTable {
                 visible: root.popupMode === "sys" && root.topProcs.length > 0
-                textFormat: Text.RichText
-                text: {
-                    var rows = '<tr>'
-                        + '<td style="padding-right:20px;"><span style="color:#B0BEC5;"><b>Top processes</b></span></td>'
-                        + '<td style="padding-right:14px;"><span style="color:' + root.claudeDimHex + ';">CPU</span></td>'
-                        + '<td><span style="color:' + root.claudeDimHex + ';">MEM</span></td></tr>'
-                    for (var i = 0; i < root.topProcs.length; i++) {
-                        var pr = root.topProcs[i]
-                        rows += '<tr><td style="padding-right:20px;"><span style="color:#FFFFFF;">' + pr.name + '</span></td>'
-                            + '<td style="padding-right:14px;"><span style="color:' + root.cpuHex + ';">' + pr.cpu + '%</span></td>'
-                            + '<td><span style="color:' + root.ramHex + ';">' + pr.mem + '%</span></td></tr>'
-                    }
-                    return '<table cellspacing="0" cellpadding="2">' + rows + '</table>'
-                }
+                title: "Top activity"
+                procs: root.topProcs
+            }
+            Rectangle {
+                visible: root.popupMode === "sys" && root.topApps.length > 0
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                Layout.bottomMargin: 2
+                height: 1
+                color: "#33888888"
+            }
+            ProcTable {
+                visible: root.popupMode === "sys" && root.topApps.length > 0
+                title: "Top apps"
+                procs: root.topApps
             }
 
             // ── Claude usage section ──
@@ -1435,19 +1427,38 @@ PlasmoidItem {
                 var output = (buffers[source] || "")
                 delete buffers[source]
                 disconnectSource(source)
-                var rows = output.split("\n"), out = []
-                for (var i = 1; i < rows.length && out.length < 7; i++) {
+                var sysNames = ["java", "plasma", "kwin", "systemd", "pipewire", "wireplumber",
+                    "xwayland", "kded", "kio", "dbus", "baloo", "krunner", "kglobalaccel",
+                    "polkit", "rtkit", "packagekit", "ksystemstats", "kaccess", "xdg-",
+                    "sd-pam", "gjs", "at-spi", "gvfs", "kernel", "kworker", "ps", "spectacle"]
+                function isSystem(n) {
+                    var ln = n.toLowerCase()
+                    for (var k = 0; k < sysNames.length; k++)
+                        if (ln.indexOf(sysNames[k]) === 0) return true
+                    return false
+                }
+                var rows = output.split("\n"), all = []
+                for (var i = 1; i < rows.length; i++) {
                     var f = rows[i].trim().split(/\s+/)
                     if (f.length >= 3 && parseFloat(f[f.length - 2]) > 0)
-                        out.push({name: f.slice(0, f.length - 2).join(" "), cpu: f[f.length - 2], mem: f[f.length - 1]})
+                        all.push({name: f.slice(0, f.length - 2).join(" "), cpu: f[f.length - 2], mem: f[f.length - 1]})
                 }
-                topProcs = out
+                var t3 = all.slice(0, 3)
+                var apps = []
+                for (var j = 0; j < all.length && apps.length < 3; j++) {
+                    if (isSystem(all[j].name)) continue
+                    var dup = false
+                    for (var m = 0; m < t3.length; m++) if (t3[m].name === all[j].name) dup = true
+                    if (!dup) apps.push(all[j])
+                }
+                topProcs = t3
+                topApps = apps
             }
         }
     }
 
     function refreshProcs() {
-        procSource.connectSource("sh -c 'ps -eo comm,%cpu,%mem --sort=-%cpu | head -12'")
+        procSource.connectSource("sh -c 'ps -eo comm,%cpu,%mem --sort=-%cpu | head -40'")
     }
 
     onExpandedChanged: {
