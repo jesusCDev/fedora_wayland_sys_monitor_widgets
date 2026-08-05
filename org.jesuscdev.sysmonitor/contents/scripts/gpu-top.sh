@@ -5,7 +5,8 @@
 set -u
 
 sample() {
-    awk '/^drm-engine-(gfx|render|compute|3d|video[^:]*):/ {split(FILENAME, a, "/"); s[a[3]] += $2}
+    awk 'BEGINFILE { if (ERRNO) nextfile }  # unreadable fdinfo (other users) is fatal in gawk without this
+         /^drm-engine-(gfx|render|compute|3d|video[^:]*):/ {split(FILENAME, a, "/"); s[a[3]] += $2}
          END {for (p in s) print p, s[p]}' /proc/[0-9]*/fdinfo/* 2>/dev/null | sort
 }
 
@@ -20,4 +21,4 @@ join <(echo "$A") <(echo "$B") 2>/dev/null | while read -r pid t1 t2; do
     [ "$pct" -gt 100 ] && pct=100
     name=$(cat "/proc/$pid/comm" 2>/dev/null) || continue
     printf '%s\t%s\n' "$pct" "$name"
-done | sort -rn | head -3 | awk -F'\t' '{printf "%s\t%s%%\n", $2, $1}'
+done | sort -rn | head -3 | awk -F'\t' '{printf "%s\t%s%%\n", $2, ($1 == 0 ? "<1" : $1)}'

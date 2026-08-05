@@ -22,6 +22,7 @@ ScrollView {
     property alias cfg_claudeCritThreshold: claudeCritSpin.value
     property alias cfg_ccusageEnabled: ccusageCheck.checked
     property alias cfg_showCodex: codexCheck.checked
+    property alias cfg_aiResetCountdown: aiResetCheck.checked
     property alias cfg_notifyEnabled: notifyCheck.checked
     property alias cfg_showCostPanel: costPanelCheck.checked
     property alias cfg_sysPopupEnabled: sysPopupCheck.checked
@@ -137,6 +138,12 @@ ScrollView {
             id: codexCheck
             Kirigami.FormData.label: "Codex:"
             text: "Show Codex/ChatGPT usage"
+        }
+
+        CheckBox {
+            id: aiResetCheck
+            Kirigami.FormData.label: "Reset display:"
+            text: "Show time left until reset instead of 5h/7d labels"
         }
 
         CheckBox {

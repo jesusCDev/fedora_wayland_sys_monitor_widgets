@@ -82,7 +82,7 @@ PlasmoidItem {
                             case "gpu": return "GPU " + root.fmt(root.gpuValue) + "%"
                             case "ram": return "RAM " + root.ramUsedGB.toFixed(1) + "G / " + root.ramTotalGB.toFixed(1) + "G  (" + Math.round(root.ramValue) + "%)"
                             case "net": return root.netConnected
-                                ? "Net  ↓ " + root.fmtNetSpeed(root.netDownBytes).replace(/&nbsp;/g, "") + "   ↑ " + root.fmtNetSpeed(root.netUpBytes).replace(/&nbsp;/g, "")
+                                ? "Net  ↓ " + root.fmtNetSpeed(root.netDownBytes) + "   ↑ " + root.fmtNetSpeed(root.netUpBytes)
                                 : "Network — disconnected"
                             case "disk": return "Storage " + Math.round(root.diskValue) + "%"
                             case "uptime": return "System"
@@ -100,6 +100,55 @@ PlasmoidItem {
                         font.pointSize: 10
                         text: (root.batPowerNow > 0 ? (root.batPowerNow / 1000000).toFixed(1) + "W draw" : "")
                             + (root.fmtBatTime() ? (root.batPowerNow > 0 ? "   ·   " : "") + "~" + root.fmtBatTime() + (root.batCharging ? " until full" : " until empty") : "")
+                    }
+                    // Brightness bars
+                    RowLayout {
+                        visible: root.hoverSeg === "bat" && root.screenBrightPct >= 0
+                        spacing: 8
+                        Text { text: "Screen"; color: "#FFFFFF"; font.pointSize: 9; Layout.preferredWidth: 48 }
+                        Rectangle {
+                            Layout.preferredWidth: 96; Layout.preferredHeight: 5; radius: 2.5
+                            color: "#33888888"
+                            Rectangle {
+                                width: Math.max(3, parent.width * root.screenBrightPct / 100)
+                                height: parent.height; radius: parent.radius
+                                color: root.batHex
+                            }
+                        }
+                        Text {
+                            text: root.screenBrightPct + "%"
+                            color: root.batHex; font.bold: true; font.pointSize: 9
+                            Layout.preferredWidth: 32; horizontalAlignment: Text.AlignRight
+                        }
+                    }
+                    RowLayout {
+                        visible: root.hoverSeg === "bat" && root.kbdBrightMax > 0
+                        spacing: 8
+                        Text { text: "Kbd"; color: "#FFFFFF"; font.pointSize: 9; Layout.preferredWidth: 48 }
+                        Rectangle {
+                            Layout.preferredWidth: 96; Layout.preferredHeight: 5; radius: 2.5
+                            color: "#33888888"
+                            Rectangle {
+                                width: Math.max(root.kbdBrightLevel > 0 ? 3 : 0,
+                                                parent.width * root.kbdBrightLevel / Math.max(1, root.kbdBrightMax))
+                                height: parent.height; radius: parent.radius
+                                color: root.batHex
+                            }
+                        }
+                        Text {
+                            text: root.kbdBrightLevel + "/" + root.kbdBrightMax
+                            color: root.batHex; font.bold: true; font.pointSize: 9
+                            Layout.preferredWidth: 32; horizontalAlignment: Text.AlignRight
+                        }
+                    }
+                    // Charge thresholds
+                    Text {
+                        visible: root.hoverSeg === "bat" && root.batChargeLimit < 100
+                        color: root.claudeDimHex
+                        font.pointSize: 9
+                        text: "Charge limit " + root.batChargeLimit + "%"
+                            + (root.batStartThreshold > 0 && root.batStartThreshold < 100
+                               ? "   ·   resumes below " + root.batStartThreshold + "%" : "")
                     }
 
                     // CPU: top by processor
@@ -197,7 +246,7 @@ PlasmoidItem {
                         visible: root.hoverSeg === "uptime"
                         color: "#FFFFFF"
                         font.pointSize: 10
-                        text: "Up " + root.fmtUptime(root.uptimeSecs).replace(/&nbsp;/g, "")
+                        text: "Up " + root.fmtUptime(root.uptimeSecs)
                     }
                     Text {
                         visible: root.hoverSeg === "uptime"
@@ -311,6 +360,9 @@ PlasmoidItem {
             diskSource.connectSource("sh -c \"df -BG / --output=pcent,size,used | tail -1 | tr -d '%G'\"")
         else if (seg === "uptime")
             uptimeSource.connectSource("sh -c \"awk '{print \\$1}' /proc/uptime\"")
+        else if (seg === "bat")
+            // ponytail: ThinkPad sysfs paths hardcoded, single-laptop widget
+            batInfoSource.connectSource("sh -c \"cat /sys/class/backlight/intel_backlight/brightness /sys/class/backlight/intel_backlight/max_brightness '/sys/class/leds/tpacpi::kbd_backlight/brightness' '/sys/class/leds/tpacpi::kbd_backlight/max_brightness' /sys/class/power_supply/BAT0/charge_control_start_threshold 2>/dev/null\"")
     }
 
     // Font Awesome
@@ -334,6 +386,10 @@ PlasmoidItem {
     property real batEnergyFull: 0.0
     property real batPowerNow: 0.0
     property int batChargeLimit: 100  // 0-100, from charge_control_end_threshold
+    property int batStartThreshold: 0   // charging resumes below this, from charge_control_start_threshold
+    property int screenBrightPct: -1    // -1 = not read yet
+    property int kbdBrightLevel: 0
+    property int kbdBrightMax: 0
 
     // CPU delta tracking
     property real prevCpuIdle: 0
@@ -398,6 +454,23 @@ PlasmoidItem {
     // Codex/ChatGPT usage state: weekly from free wham/usage endpoint (account-wide,
     // covers other machines); optional 5h window from local session logs
     property bool showCodex: Plasmoid.configuration.showCodex
+    property bool aiResetCountdown: Plasmoid.configuration.aiResetCountdown
+
+    // ── Panel font scaling: track panel thickness, ~10pt at the default 40px ──
+    property real panelHeight: 0
+    readonly property real panelPt: panelHeight > 0
+        ? Math.max(10, Math.round(panelHeight * 0.33 * 2) / 2) : 10
+    readonly property int panelIconPx: Math.round(panelPt * 1.3)
+    property int aiTick: 0  // bumped each minute so countdown labels re-render between fetches
+    Timer {
+        interval: 60000; repeat: true
+        running: root.aiResetCountdown && (root.showClaude || root.showCodex)
+        onTriggered: root.aiTick++
+    }
+    // countdown text when enabled, else static window label ("5h"/"7d")
+    function aiWinLabel(fallback, countdown) {
+        return (aiResetCountdown && countdown) ? countdown : fallback
+    }
     property var codexWeekly: null       // {used_percent, resets_at, fetched_at}
     property var codexSession: null      // {used_percent, resets_at, fetched_at} or null
     property string codexPlan: ""
@@ -597,16 +670,17 @@ PlasmoidItem {
     }
 
     function claudeIconHtml() {
-        return '<img src="' + Qt.resolvedUrl("../icons/claude-spark.svg") + '" width="13" height="13"> '
+        return '<img src="' + Qt.resolvedUrl("../icons/claude-mascot.png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '"> '
     }
 
     function claudeItemHtml() {
+        var tick = aiTick  // dependency: minute timer refreshes countdowns
         var s = claudeLimitByKind("session")
         var w = claudeLimitByKind("weekly_all")
         var parts = []
-        if (s) parts.push('<span style="color:' + claudeResetHex + ';">5h </span>'
+        if (s) parts.push('<span style="color:' + claudeResetHex + ';">' + aiWinLabel("5h", claudeFmtReset(s.resets_at)) + ' </span>'
             + '<span style="color:' + claudePctColor(s.percent) + ';">' + fmtPct(s.percent) + '</span>')
-        if (w) parts.push('<span style="color:' + claudeResetHex + ';">7d </span>'
+        if (w) parts.push('<span style="color:' + claudeResetHex + ';">' + aiWinLabel("7d", claudeFmtReset(w.resets_at)) + ' </span>'
             + '<span style="color:' + claudePctColor(w.percent) + ';">' + fmtPct(w.percent) + '</span>')
         var body = parts.length ? parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>')
                                 : '<span style="color:' + claudeDimHex + ';">…</span>'
@@ -638,7 +712,7 @@ PlasmoidItem {
     }
 
     function codexIconHtml() {
-        return '<img src="' + Qt.resolvedUrl("../icons/codex-knot.svg") + '" width="13" height="13"> '
+        return '<img src="' + Qt.resolvedUrl("../icons/codex-mascot.png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '"> '
     }
 
     property bool checking: false
@@ -658,11 +732,12 @@ PlasmoidItem {
         if (!codexWeekly && !codexSession)
             return '<b>' + codexIconHtml() + '<span style="color:' + claudeDimHex + ';">…</span></b>'
         var parts = []
+        var tick = aiTick  // dependency: minute timer refreshes countdowns
         if (codexSession)
-            parts.push('<span style="color:' + codexLabelHex + ';">5h </span>'
+            parts.push('<span style="color:' + codexLabelHex + ';">' + aiWinLabel("5h", fmtEpochReset(codexSession.resets_at)) + ' </span>'
                 + '<span style="color:' + codexPctColor(codexSession.used_percent || 0) + ';">' + fmtPct(codexSession.used_percent || 0) + '</span>')
         if (codexWeekly)
-            parts.push('<span style="color:' + codexLabelHex + ';">7d </span>'
+            parts.push('<span style="color:' + codexLabelHex + ';">' + aiWinLabel("7d", fmtEpochReset(codexWeekly.resets_at)) + ' </span>'
                 + '<span style="color:' + codexPctColor(codexWeekly.used_percent || 0) + ';">' + fmtPct(codexWeekly.used_percent || 0) + '</span>')
         return '<b>' + codexIconHtml() + parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>') + '</b>'
     }
@@ -699,10 +774,18 @@ PlasmoidItem {
     function ccToday() {
         return ccDaily.length ? ccDaily[ccDaily.length - 1] : null
     }
-    function ccWeekCost() {
-        var sum = 0
-        for (var i = 0; i < ccDaily.length; i++) sum += (ccDaily[i].totalCost || 0)
-        return sum
+    // Cost+tokens over the trailing N days (ccDaily now holds 30 days)
+    function ccRange(days) {
+        var d = new Date(Date.now() - (days - 1) * 86400000)
+        var iso = d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2)
+        var cost = 0, tok = 0
+        for (var i = 0; i < ccDaily.length; i++) {
+            if ((ccDaily[i].period || ccDaily[i].date || "") >= iso) {
+                cost += ccDaily[i].totalCost || 0
+                tok += ccDaily[i].totalTokens || 0
+            }
+        }
+        return { cost: cost, tokens: tok }
     }
     function fmtTokens(n) {
         if (n >= 1e9) return (n / 1e9).toFixed(1) + "B"
@@ -713,50 +796,40 @@ PlasmoidItem {
 
     // ── Font Awesome icon helpers ─────────────────────────────────
     function faIcon(unicode, color) {
-        return '<span style="font-family:\'' + faFont.name + '\'; color:' + color + ';">&#x' + unicode + ';</span> '
+        // &nbsp; not plain space: rich text trims trailing spaces, label would touch value
+        return '<span style="font-family:\'' + faFont.name + '\'; color:' + color + ';">&#x' + unicode + ';</span>&nbsp;'
     }
 
-    function metricLabel(text, iconUnicode, color) {
+    function metricLabel(text, iconUnicode, color, seg) {
+        // seg given = generated PNG icon exists for it; battery + net-disconnected stay font glyphs
+        if (seg !== undefined && useIcons)
+            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + ".png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '">&nbsp;'
         if (useIcons && faFont.status === FontLoader.Ready)
             return faIcon(iconUnicode, color)
-        return text + ' '
+        return text + '&nbsp;'
     }
 
-    // Format helpers
+    // Format helpers — no padding here; MetricItem reserves pixel width instead
     function fmt(val) {
         return useDecimals ? val.toFixed(1) : Math.round(val).toString()
     }
 
-    // Right-pad percentage to fixed width (widest: "100%" or "100.0%")
     function fmtPct(val) {
-        var str = fmt(val)
-        var maxLen = useDecimals ? 5 : 3  // "100.0" or "100"
-        var pad = maxLen - str.length
-        var result = str + '%'
-        for (var i = 0; i < pad; i++) result += '&nbsp;'
-        return result
+        return fmt(val) + '%'
     }
 
+    // Widest possible percentage string, for width reservation
+    readonly property string maxPct: useDecimals ? "100.0%" : "100%"
+
     function fmtRam() {
-        if (ramShowGB) {
-            var str = ramUsedGB.toFixed(1) + 'GB'
-            // Pad to 6 rendered chars (widest: "99.9GB")
-            var pad = 6 - str.length
-            for (var i = 0; i < pad; i++) str += '&nbsp;'
-            return str
-        }
+        if (ramShowGB) return ramUsedGB.toFixed(1) + 'GB'
         return fmtPct(ramValue)
     }
 
     function fmtNetSpeed(bytesPerSec) {
-        var str
-        if (bytesPerSec >= 1073741824) str = (bytesPerSec / 1073741824).toFixed(1) + 'G/s'
-        else if (bytesPerSec >= 1048576) str = (bytesPerSec / 1048576).toFixed(1) + 'M/s'
-        else str = (bytesPerSec / 1024).toFixed(0) + 'K/s'
-        // Right-pad to 8 rendered chars (widest M/s: "999.9M/s") so bar width stays stable
-        var pad = 8 - str.length
-        for (var i = 0; i < pad; i++) str += '&nbsp;'
-        return str
+        if (bytesPerSec >= 1073741824) return (bytesPerSec / 1073741824).toFixed(1) + 'G/s'
+        if (bytesPerSec >= 1048576) return (bytesPerSec / 1048576).toFixed(1) + 'M/s'
+        return (bytesPerSec / 1024).toFixed(0) + 'K/s'
     }
 
     function fmtUptime(secs) {
@@ -765,7 +838,7 @@ PlasmoidItem {
         var m = Math.floor((secs % 3600) / 60)
         if (d > 0) return d + 'd ' + h + 'h'
         if (h > 0) return h + 'h ' + m + 'm'
-        return m + 'm&nbsp;'
+        return m + 'm'
     }
 
     function fmtBatTime() {
@@ -790,7 +863,7 @@ PlasmoidItem {
         var delta = current - previous
         if (delta > 2) return ' &#x2191;'   // up arrow
         if (delta < -2) return ' &#x2193;'  // down arrow
-        return ''
+        return ''  // MetricItem maxValue reserves the arrow slot
     }
 
     // Battery icon based on percentage (scales with charge limit)
@@ -813,9 +886,22 @@ PlasmoidItem {
     property string sysFocus: "cpu"
     property bool sysPopupEnabled: Plasmoid.configuration.sysPopupEnabled
 
+    // Click launches the matching tool when the detail popup is disabled
+    readonly property var metricApps: ({
+        cpu: "plasma-systemmonitor",
+        gpu: "plasma-systemmonitor",
+        ram: "plasma-systemmonitor",
+        disk: "filelight",
+        net: "systemsettings kcm_networkmanagement",
+        bat: "systemsettings kcm_powerdevilprofilesconfig"
+    })
+
     function metricClicked(type) {
         // Hover tooltips carry the detail; click popup is opt-in
-        if (!sysPopupEnabled) return
+        if (!sysPopupEnabled) {
+            if (metricApps[type]) launchApp(metricApps[type])
+            return
+        }
         if (expanded && popupMode === "sys" && sysFocus === type) { expanded = false; return }
         sysFocus = type
         popupMode = "sys"
@@ -835,7 +921,7 @@ PlasmoidItem {
                 bolt = ' <span style="color:#FFFFFF;">&#x26A1;</span>'
         }
         var batTimeStr = showBatTime && fmtBatTime() ? (' <span style="color:' + claudeDimHex + ';">' + fmtBatTime() + '</span>') : ''
-        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', batIconUnicode(), batHex) + fmt(batValue) + '%</span>' + batTimeStr + '</b>' + bolt
+        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', batIconUnicode(), batHex) + fmtPct(batValue) + '</span>' + batTimeStr + '</b>' + bolt
     }
 
     function batSepHtml() {
@@ -846,15 +932,76 @@ PlasmoidItem {
         return s
     }
 
+    // Panel item: label + value in a slot whose pixel width is reserved for the
+    // widest possible value (maxValue), value right-aligned. Item width never
+    // changes with digit count, so gaps between items stay constant.
+    component MetricItem: Item {
+        id: mi
+        property string seg
+        property string labelHtml
+        property string valueHtml
+        property string maxValue: ""  // plain-text widest value; "" = no reservation
+        // Extra trailing gap in digit widths — for items whose value always sits
+        // near max slot width (RAM, disk), so their gap matches the airier items
+        property int extraDigits: 0
+        width: miRow.width + extraDigits * miDigit.advanceWidth
+        height: miRow.height
+        TextMetrics {
+            id: miMetrics
+            font.pointSize: root.panelPt
+            font.bold: true
+            text: mi.maxValue
+        }
+        TextMetrics {
+            id: miDigit
+            font.pointSize: root.panelPt
+            font.bold: true
+            text: "0"
+        }
+        Row {
+            id: miRow
+            spacing: 0
+            Text {
+                textFormat: Text.RichText
+                font.pointSize: root.panelPt
+                verticalAlignment: Text.AlignVCenter
+                text: mi.labelHtml
+            }
+            Text {
+                textFormat: Text.RichText
+                font.pointSize: root.panelPt
+                verticalAlignment: Text.AlignVCenter
+                // Left-aligned: number sits tight against its icon, reserved
+                // slack goes to the right where it blends into the item gap
+                horizontalAlignment: Text.AlignLeft
+                width: Math.max(implicitWidth, Math.ceil(miMetrics.advanceWidth))
+                text: mi.valueHtml
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onEntered: root.segHovered(mi.seg, mi)
+            onExited: root.hoverSeg = ""
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.LeftButton) root.metricClicked(mi.seg)
+                else root.launchApp(root.clickCommand)
+            }
+        }
+    }
+
     // ── Panel view ──────────────────────────────────────────────
     compactRepresentation: Item {
         id: compactRoot
         Layout.preferredWidth: panelRow.implicitWidth + 24
         Layout.minimumWidth: panelRow.implicitWidth + 24
+        onHeightChanged: if (height > 0) root.panelHeight = height
 
         TextMetrics {
             id: spacerMetrics
-            font.pointSize: 10
+            font.pointSize: root.panelPt
             text: {
                 var s = ""
                 for (var i = 0; i < root.itemSpacing; i++) s += "\u00A0"
@@ -871,7 +1018,7 @@ PlasmoidItem {
             Text {
                 visible: root.showBat && root.batValue >= 0 && !root.batOnRight
                 textFormat: Text.RichText
-                font.pointSize: 10
+                font.pointSize: root.panelPt
                 verticalAlignment: Text.AlignVCenter
                 text: root.batItemHtml() + (root.hasSysMetrics ? root.batSepHtml() : '')
                 MouseArea {
@@ -892,142 +1039,73 @@ PlasmoidItem {
             Row {
                 spacing: spacerMetrics.width
 
-                Text {
+                MetricItem {
                     visible: root.showCpu
-                    textFormat: Text.RichText
-                    font.pointSize: 10
-                    verticalAlignment: Text.AlignVCenter
-                    text: '<b><span style="color:' + root.cpuHex + ';">'
-                        + root.metricLabel('CPU', 'f2db', root.cpuHex) + root.fmtPct(root.cpuValue)
+                    seg: "cpu"
+                    labelHtml: '<b><span style="color:' + root.cpuHex + ';">' + root.metricLabel('CPU', 'f2db', root.cpuHex, 'cpu') + '</span></b>'
+                    valueHtml: '<b><span style="color:' + root.cpuHex + ';">' + root.fmtPct(root.cpuValue)
                         + (root.showCpuTemp && root.cpuTemp > 0 ? ' ' + Math.round(root.cpuTemp) + '°' : '')
                         + root.trendArrow(root.cpuValue, root.prevCpuDisplay) + '</span></b>'
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onEntered: root.segHovered("cpu", parent)
-                        onExited: root.hoverSeg = ""
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton) root.metricClicked("cpu")
-                            else root.launchApp(root.clickCommand)
-                        }
-                    }
+                    maxValue: root.maxPct
+                        + (root.showCpuTemp && root.cpuTemp > 0 ? ' 99°' : '')
+                        + (root.showTrendArrows ? ' ↑' : '')
                 }
 
-                Text {
+                MetricItem {
                     visible: root.showGpu
-                    textFormat: Text.RichText
-                    font.pointSize: 10
-                    verticalAlignment: Text.AlignVCenter
-                    text: '<b><span style="color:' + root.gpuHex + ';">'
-                        + root.metricLabel('GPU', 'f625', root.gpuHex) + root.fmtPct(root.gpuValue)
+                    seg: "gpu"
+                    labelHtml: '<b><span style="color:' + root.gpuHex + ';">' + root.metricLabel('GPU', 'f625', root.gpuHex, 'gpu') + '</span></b>'
+                    valueHtml: '<b><span style="color:' + root.gpuHex + ';">' + root.fmtPct(root.gpuValue)
                         + (root.showGpuTemp && root.gpuTemp > 0 ? ' ' + Math.round(root.gpuTemp) + '°' : '')
                         + root.trendArrow(root.gpuValue, root.prevGpuDisplay) + '</span></b>'
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onEntered: root.segHovered("gpu", parent)
-                        onExited: root.hoverSeg = ""
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton) root.metricClicked("gpu")
-                            else root.launchApp(root.clickCommand)
-                        }
-                    }
+                    maxValue: root.maxPct
+                        + (root.showGpuTemp && root.gpuTemp > 0 ? ' 99°' : '')
+                        + (root.showTrendArrows ? ' ↑' : '')
                 }
 
-                Text {
+                MetricItem {
                     visible: root.showRam
-                    textFormat: Text.RichText
-                    font.pointSize: 10
-                    verticalAlignment: Text.AlignVCenter
-                    text: '<b><span style="color:' + root.ramHex + ';">'
-                        + root.metricLabel('RAM', 'f538', root.ramHex) + root.fmtRam()
+                    seg: "ram"
+                    labelHtml: '<b><span style="color:' + root.ramHex + ';">' + root.metricLabel('RAM', 'f538', root.ramHex, 'ram') + '</span></b>'
+                    valueHtml: '<b><span style="color:' + root.ramHex + ';">' + root.fmtRam()
                         + root.trendArrow(root.ramValue, root.prevRamDisplay) + '</span></b>'
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onEntered: root.segHovered("ram", parent)
-                        onExited: root.hoverSeg = ""
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton) root.metricClicked("ram")
-                            else root.launchApp(root.clickCommand)
-                        }
-                    }
+                    maxValue: (root.ramShowGB ? '99.9GB' : root.maxPct)
+                        + (root.showTrendArrows ? ' ↑' : '')
+                    extraDigits: 2
                 }
 
-                Text {
+                MetricItem {
                     visible: root.showDisk
-                    textFormat: Text.RichText
-                    font.pointSize: 10
-                    verticalAlignment: Text.AlignVCenter
-                    text: '<b><span style="color:' + root.diskHex + ';">'
-                        + root.metricLabel('DISK', 'f0a0', root.diskHex) + root.fmtPct(root.diskValue) + '</span></b>'
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onEntered: root.segHovered("disk", parent)
-                        onExited: root.hoverSeg = ""
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton) root.metricClicked("disk")
-                            else root.launchApp(root.clickCommand)
-                        }
-                    }
+                    seg: "disk"
+                    labelHtml: '<b><span style="color:' + root.diskHex + ';">' + root.metricLabel('DISK', 'f0a0', root.diskHex, 'disk') + '</span></b>'
+                    valueHtml: '<b><span style="color:' + root.diskHex + ';">' + root.fmtPct(root.diskValue) + '</span></b>'
+                    maxValue: root.maxPct
+                    extraDigits: 1
                 }
 
-                Text {
+                MetricItem {
                     visible: root.showUptime
-                    textFormat: Text.RichText
-                    font.pointSize: 10
-                    verticalAlignment: Text.AlignVCenter
-                    text: '<b><span style="color:' + root.uptimeHex + ';">'
-                        + root.metricLabel('UP', 'f017', root.uptimeHex) + root.fmtUptime(root.uptimeSecs) + '</span></b>'
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onEntered: root.segHovered("uptime", parent)
-                        onExited: root.hoverSeg = ""
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton) root.metricClicked("uptime")
-                            else root.launchApp(root.clickCommand)
-                        }
-                    }
+                    seg: "uptime"
+                    labelHtml: '<b><span style="color:' + root.uptimeHex + ';">' + root.metricLabel('UP', 'f017', root.uptimeHex, 'uptime') + '</span></b>'
+                    valueHtml: '<b><span style="color:' + root.uptimeHex + ';">' + root.fmtUptime(root.uptimeSecs) + '</span></b>'
+                    extraDigits: 1
                 }
 
-                Text {
+                MetricItem {
                     visible: root.showNet
-                    textFormat: Text.RichText
-                    font.pointSize: 10
-                    verticalAlignment: Text.AlignVCenter
-                    text: '<b><span style="color:' + root.netHex + ';">'
-                        + root.metricLabel('NET', root.netConnected ? 'f019' : 'f071', root.netHex)
+                    seg: "net"
+                    labelHtml: '<b><span style="color:' + root.netHex + ';">'
+                        + root.metricLabel('NET', root.netConnected ? 'f019' : 'f071', root.netHex,
+                            root.netConnected ? 'net' : undefined) + '</span></b>'
+                    valueHtml: '<b><span style="color:' + root.netHex + ';">'
                         + (root.netConnected ? root.fmtNetSpeed(root.netDownBytes) : 'OFF') + '</span></b>'
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onEntered: root.segHovered("net", parent)
-                        onExited: root.hoverSeg = ""
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton) root.metricClicked("net")
-                            else root.launchApp(root.clickCommand)
-                        }
-                    }
+                    maxValue: '999.9M/s'
                 }
 
                 Text {
                     visible: root.showClaude
                     textFormat: Text.RichText
-                    font.pointSize: 10
+                    font.pointSize: root.panelPt
                     verticalAlignment: Text.AlignVCenter
                     text: root.claudeItemHtml()
                     MouseArea {
@@ -1047,7 +1125,7 @@ PlasmoidItem {
                 Text {  // soft divider between AI segments
                     visible: root.showClaude && root.showCodex
                     textFormat: Text.RichText
-                    font.pointSize: 10
+                    font.pointSize: root.panelPt
                     verticalAlignment: Text.AlignVCenter
                     text: '<span style="color:#45484D;">&#x2502;</span>'
                 }
@@ -1055,7 +1133,7 @@ PlasmoidItem {
                 Text {
                     visible: root.showCodex
                     textFormat: Text.RichText
-                    font.pointSize: 10
+                    font.pointSize: root.panelPt
                     verticalAlignment: Text.AlignVCenter
                     text: root.codexItemHtml()
                     MouseArea {
@@ -1075,7 +1153,7 @@ PlasmoidItem {
                 Text {  // today's local spend
                     visible: root.showCostPanel && root.ccToday() !== null
                     textFormat: Text.RichText
-                    font.pointSize: 10
+                    font.pointSize: root.panelPt
                     verticalAlignment: Text.AlignVCenter
                     text: {
                         var t = root.ccToday()
@@ -1095,7 +1173,7 @@ PlasmoidItem {
             Text {
                 visible: root.showBat && root.batValue >= 0 && root.batOnRight
                 textFormat: Text.RichText
-                font.pointSize: 10
+                font.pointSize: root.panelPt
                 verticalAlignment: Text.AlignVCenter
                 text: (root.hasSysMetrics ? root.batSepHtml() : '') + root.batItemHtml()
                 MouseArea {
@@ -1173,7 +1251,7 @@ PlasmoidItem {
                 color: root.claudeDimHex
                 font.pointSize: 10
                 text: "Booted " + Qt.formatDateTime(new Date(Date.now() - root.uptimeSecs * 1000), "ddd MMM d, h:mm AP")
-                    + "  ·  up " + root.fmtUptime(root.uptimeSecs).replace(/&nbsp;/g, "")
+                    + "  ·  up " + root.fmtUptime(root.uptimeSecs)
             }
 
             Rectangle {
@@ -1357,7 +1435,21 @@ PlasmoidItem {
                     }
                 }
                 Text { text: "Last 7 days"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
-                Text { color: "#FFFFFF"; font.pointSize: 10; text: "$" + root.ccWeekCost().toFixed(2) }
+                Text {
+                    color: "#FFFFFF"; font.pointSize: 10
+                    text: {
+                        var r = root.ccRange(7)
+                        return "$" + r.cost.toFixed(2) + "  ·  " + root.fmtTokens(r.tokens) + " tokens"
+                    }
+                }
+                Text { text: "Last 30 days"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
+                Text {
+                    color: "#FFFFFF"; font.pointSize: 10
+                    text: {
+                        var r = root.ccRange(30)
+                        return "$" + r.cost.toFixed(2) + "  ·  " + root.fmtTokens(r.tokens) + " tokens"
+                    }
+                }
             }
             ColumnLayout {
                 visible: root.popupMode === "claude" && root.ccusageEnabled && root.ccToday() !== null
@@ -1563,7 +1655,10 @@ PlasmoidItem {
         var parts = output.split("|")
         var totalRx = parseFloat(parts[0]) || 0
         var totalTx = parseFloat(parts[1]) || 0
-        netConnected = (parts[2] || "").trim() === "1"
+        // Only trust an explicit 0/1 — empty or garbled output (failed poll)
+        // must not flash the item to "OFF"
+        var st = (parts[2] || "").trim()
+        if (st === "0" || st === "1") netConnected = (st === "1")
         if (!netFirstRun) {
             var dr = totalRx - prevNetRxBytes
             var dt = totalTx - prevNetTxBytes
@@ -1614,6 +1709,28 @@ PlasmoidItem {
                 disconnectSource(source)
                 var val = parseFloat(output) || 0
                 uptimeSecs = val
+            }
+        }
+    }
+
+    // ── Battery hover info (brightness + charge thresholds) ─────
+    PlasmaSupport.DataSource {
+        id: batInfoSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var lines = (buffers[source] || "").trim().split("\n")
+                delete buffers[source]
+                disconnectSource(source)
+                var cur = parseInt(lines[0]), max = parseInt(lines[1])
+                screenBrightPct = (max > 0) ? Math.round(cur / max * 100) : -1
+                kbdBrightLevel = parseInt(lines[2]) || 0
+                kbdBrightMax = parseInt(lines[3]) || 0
+                batStartThreshold = parseInt(lines[4]) || 0
             }
         }
     }
@@ -1786,7 +1903,7 @@ PlasmoidItem {
     function refreshCcusage() {
         if (!showClaude || !ccusageEnabled || ccRunning) return
         if (Date.now() - ccFetchedAt < 30 * 60 * 1000) return
-        var d = new Date(Date.now() - 6 * 86400000)
+        var d = new Date(Date.now() - 29 * 86400000)
         var since = "" + d.getFullYear()
             + ("0" + (d.getMonth() + 1)).slice(-2)
             + ("0" + d.getDate()).slice(-2)
@@ -1940,7 +2057,7 @@ PlasmoidItem {
         }
 
         if (showNet) {
-            netSource.connectSource("sh -c 'read rx tx <<< $(awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); r+=\\$2; t+=\\$10} END{print r+0, t+0}\" /proc/net/dev); up=0; for iface in /sys/class/net/*; do n=$(basename $iface); [ \"$n\" != \"lo\" ] && s=$(cat $iface/operstate 2>/dev/null); [ \"$s\" = \"up\" ] && up=1; done; echo \"$rx|$tx|$up\"'")
+            netSource.connectSource("sh -c 'read rx tx <<< $(awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); r+=\\$2; t+=\\$10} END{print r+0, t+0}\" /proc/net/dev); up=0; grep -qx up /sys/class/net/*/operstate 2>/dev/null && up=1; echo \"$rx|$tx|$up\"'")
         }
 
         if (showDisk) {

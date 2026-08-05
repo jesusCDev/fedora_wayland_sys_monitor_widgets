@@ -151,6 +151,9 @@
         <entry name="showCodex" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="aiResetCountdown" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="notifyEnabled" type="Bool">
             <default>true</default>
         </entry>

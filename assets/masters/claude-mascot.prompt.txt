@@ -1,0 +1,12 @@
+Generated 2026-08-05 via image-asset-gen skill (Codex gpt-image-2, --transparent, 1024x1024 request / 1254x1254 actual)
+
+Asset type: tiny system-tray panel icon for a desktop widget
+Subject: friendly little orange spark creature mascot — a plump asterisk/starburst shape with six rounded stubby arms and two simple dark oval eyes, evoking a cheerful terminal spinner come to life
+Style/medium: flat vector, chunky pixel-art-inspired, bold simple silhouette, high contrast, thick forms
+Composition: single centred subject occupying the middle 60% of the frame, generous empty margin all sides
+Colour palette: body #D97757 warm coral-orange with #C15F3C shading, eyes #1A1A1A
+Constraints: no text, no watermark, no drop shadow, no background scenery, no thin lines (must stay readable at 16 pixels)
+Avoid: gradients heavier than two tones, faces with mouths, outlines thinner than 1/40 of frame
+
+Derived: contents/icons/claude-mascot.png (52px) + claude-mascot@2x.png (26px)
+from bbox-cropped, square-padded master via Pillow LANCZOS.

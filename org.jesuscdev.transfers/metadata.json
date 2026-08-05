@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "jesuscdev"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Progress bars for running file transfers and downloads, hidden when idle",
+        "Icon": "folder-download-symbolic",
+        "Id": "org.jesuscdev.transfers",
+        "Name": "Transfer Progress",
+        "Version": "1.0.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

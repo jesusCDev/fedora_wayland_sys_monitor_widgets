@@ -1,9 +1,20 @@
-# System Monitor Inline — KDE Plasma 6 Widget
+# Fedora Wayland System Monitor Widgets — KDE Plasma 6
 
-A minimal, color-coded system monitor widget for the KDE Plasma 6 panel. Displays CPU, GPU, RAM, network speed, and battery usage as colored text directly in your top bar.
+A small collection of personal KDE Plasma 6 panel widgets:
+
+| Widget | What it does |
+|--------|--------------|
+| `org.jesuscdev.sysmonitor` | Inline color-coded system metrics + Claude/Codex AI usage tracking (main widget, documented below) |
+| `org.jesuscdev.transfers` | Per-job progress bars for KDE file transfers/downloads; hidden when idle |
+| `org.jesuscdev.clock` | Custom clock |
+| `org.jesuscdev.workspaces` | Workspace switcher |
 
 ![Plasma 6](https://img.shields.io/badge/Plasma-6.0%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+
+# System Monitor Inline
+
+A minimal, color-coded system monitor widget for the KDE Plasma 6 panel. Displays CPU, GPU, RAM, network speed, and battery usage as colored text directly in your top bar.
 
 ## What It Looks Like
 
@@ -33,6 +44,31 @@ Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple
 - **Configurable spacing** — adjust space between items (default 3, range 1–10)
 - **Custom colors** — override colors for any metric individually, with color picker
 - **Fully configurable** — show/hide each metric, decimal precision, RAM in GB, battery position, separator style, update interval
+- **Generated pixel icons** — chunky per-metric PNG icons (AI-generated masters in `assets/masters/` with prompts; wide subjects rotated vertical for readability at panel size)
+- **Panel-height aware** — fonts and icons scale with panel thickness automatically
+- **Hover tooltips** — per-metric detail on hover: top CPU/RAM processes, real per-app GPU users (DRM fdinfo), network rates, battery detail with screen/keyboard brightness bars and charge thresholds
+- **Click actions** — click a metric to open the matching tool (task manager, Filelight, network/power settings); optional detail popup mode instead
+
+### Claude & Codex usage tracking
+
+The panel can also show live AI subscription usage — session (5h) and weekly windows for both Claude and Codex/ChatGPT:
+
+- **Reset countdown** — shows time left until each window resets (e.g. `1h 28m 86%`), or classic `5h`/`7d` labels (toggle in settings)
+- **Color thresholds + notifications** — usage % turns amber/red at configurable thresholds; optional notification on red / window reset
+- **Local spend** — today / last 7 days / last 30 days cost + tokens from Claude Code logs via [ccusage](https://github.com/ryoppippi/ccusage) (optional; set the command path in settings)
+- **Popup** — click the panel item for full breakdown: all limit windows, usage sparklines, per-model cost, check-now button
+
+Credentials are **read at runtime from local files only** (`~/.claude/.credentials.json`, `~/.codex/auth.json`) — nothing is stored in this repo, tokens never appear in process argv, and responses are cached under `~/.cache/`. See `contents/scripts/fetch-usage.sh` and `fetch-codex.sh`.
+
+# Transfer Progress (`org.jesuscdev.transfers`)
+
+Replacement for the notification pie-chart during file operations. Subscribes to the same KDE job feed the notification popup uses (Dolphin copies/moves, KDE downloads, Plasma Browser Integration downloads):
+
+- **Hidden when idle** — takes zero panel space with no active jobs
+- **Panel** — one mini progress bar + % per running job
+- **Popup** — per job: name, destination, bar, speed, transferred/total, ETA, pause/resume and cancel buttons
+
+Install same as below, package id `org.jesuscdev.transfers`.
 
 ## Settings
 
