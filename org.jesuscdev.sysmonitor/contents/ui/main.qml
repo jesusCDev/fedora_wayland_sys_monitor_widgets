@@ -142,18 +142,33 @@ PlasmoidItem {
                         }
                     }
                     // Display auto-switch state (60Hz/EDR-off on battery, 165Hz/EDR-on on AC)
-                    Text {
+                    RowLayout {
                         visible: root.hoverSeg === "bat" && root.dispRefreshHz > 0
-                        color: root.claudeDimHex
-                        font.pointSize: 9
-                        text: "Display " + root.dispRefreshHz + " Hz"
-                            + (root.dispEdr >= 0 ? "   ·   EDR " + (root.dispEdr === 1 ? "on" : "off") : "")
-                            + "   ·   auto (" + (root.batCharging ? "AC" : "battery") + ")"
+                        spacing: 8
+                        Text { text: "Display"; color: "#FFFFFF"; font.pointSize: 9; Layout.preferredWidth: 48 }
+                        Text {
+                            text: root.dispRefreshHz + " Hz"
+                            color: root.batHex; font.bold: true; font.pointSize: 9
+                        }
+                        Text {
+                            text: "auto · " + (root.batCharging ? "AC" : "battery")
+                            color: "#BBBBBB"; font.pointSize: 9
+                        }
+                    }
+                    RowLayout {
+                        visible: root.hoverSeg === "bat" && root.dispEdr >= 0
+                        spacing: 8
+                        Text { text: "EDR"; color: "#FFFFFF"; font.pointSize: 9; Layout.preferredWidth: 48 }
+                        Text {
+                            text: root.dispEdr === 1 ? "on" : "off"
+                            color: root.dispEdr === 1 ? root.batHex : "#BBBBBB"
+                            font.bold: true; font.pointSize: 9
+                        }
                     }
                     // Charge thresholds
                     Text {
                         visible: root.hoverSeg === "bat" && root.batChargeLimit < 100
-                        color: root.claudeDimHex
+                        color: "#BBBBBB"
                         font.pointSize: 9
                         text: "Charge limit " + root.batChargeLimit + "%"
                             + (root.batStartThreshold > 0 && root.batStartThreshold < 100
