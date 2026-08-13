@@ -10,10 +10,33 @@ PlasmoidItem {
 
     // One hue per column = one hue per workflow (1 dev, 2 personal, 3 media)
     readonly property var colColors: ["#90CAF9", "#B39DDB", "#A5D6A7", "#FFCC80"]
-    readonly property string currentHex: "#D97757"   // Claude orange ring = you are here
+    readonly property string currentHex: "#FF8A65"   // bright orange = you are here
 
     // desktop id (string) -> true when at least one window lives there
     property var occupied: ({})
+    // desktop id (string) -> [app names], for the hover tooltip
+    property var desktopWins: ({})
+
+    // Panel font scaling: track panel thickness, ~10pt at the default 40px
+    property real panelHeight: 0
+    readonly property real panelPt: panelHeight > 0
+        ? Math.max(10, Math.round(panelHeight * 0.33 * 2) / 2) : 10
+    readonly property real cellScale: panelPt / 10
+
+    // Native hover tooltip: one line per occupied workspace with its apps
+    toolTipMainText: "Workspace " + beaconLabel().text
+    toolTipSubText: {
+        var lines = []
+        for (var i = 0; i < vdInfo.numberOfDesktops; i++) {
+            var apps = desktopWins[vdInfo.desktopIds[i]] || []
+            if (i !== currentIndex && apps.length === 0) continue
+            var col = i % gridColumns
+            var nm = (colNames[col] || ("C" + (col + 1))).trim() + "·" + (Math.floor(i / gridColumns) + 1)
+            lines.push((i === currentIndex ? "▸ " : "  ") + nm
+                + (apps.length ? " — " + apps.join(", ") : ""))
+        }
+        return lines.join("\n")
+    }
 
     // "grid" = open KWin Grid View (4-finger swipe up); "switch" = jump to clicked desktop
     property string clickAction: Plasmoid.configuration.clickAction
@@ -51,6 +74,9 @@ PlasmoidItem {
 
     TaskManager.VirtualDesktopInfo {
         id: vdInfo
+        // occupancy map goes stale when desktops are added/removed
+        onNumberOfDesktopsChanged: root.recompute()
+        onDesktopIdsChanged: root.recompute()
     }
 
     TaskManager.TasksModel {
@@ -64,20 +90,28 @@ PlasmoidItem {
     }
 
     function recompute() {
-        var occ = {}
+        var occ = {}, wins = {}
+        function add(id, name) {
+            occ[id] = true
+            if (!name) return
+            wins[id] = wins[id] || []
+            if (wins[id].indexOf(name) < 0) wins[id].push(name)
+        }
         for (var i = 0; i < tasksModel.count; i++) {
             var idx = tasksModel.makeModelIndex(i)
+            var name = tasksModel.data(idx, TaskManager.AbstractTasksModel.AppName) || ""
             if (tasksModel.data(idx, TaskManager.AbstractTasksModel.IsOnAllVirtualDesktops) === true) {
                 for (var d = 0; d < vdInfo.desktopIds.length; d++)
-                    occ[vdInfo.desktopIds[d]] = true
+                    add(vdInfo.desktopIds[d], name)
                 continue
             }
             var vds = tasksModel.data(idx, TaskManager.AbstractTasksModel.VirtualDesktops)
             if (vds)
                 for (var j = 0; j < vds.length; j++)
-                    occ[vds[j]] = true
+                    add(vds[j], name)
         }
         occupied = occ
+        desktopWins = wins
     }
 
     PlasmaSupport.DataSource {
@@ -91,6 +125,7 @@ PlasmoidItem {
     }
 
     compactRepresentation: Item {
+        onHeightChanged: if (height > 0) root.panelHeight = height
         readonly property real contentWidth: root.widgetStyle === "minimap" ? beacon.implicitWidth : grid.implicitWidth
         Layout.preferredWidth: contentWidth + 14
         Layout.minimumWidth: contentWidth + 14
@@ -109,7 +144,7 @@ PlasmoidItem {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                font.pointSize: 11
+                font.pointSize: root.panelPt + 1
                 font.bold: true
                 color: root.beaconLabel().color
                 text: root.beaconLabel().text
@@ -133,8 +168,8 @@ PlasmoidItem {
                         readonly property bool isOccupied: root.occupied[vdInfo.desktopIds[index]] === true
                         readonly property bool isCurrent: index === root.currentIndex
 
-                        width: 5
-                        height: 5
+                        width: Math.round(5 * root.cellScale)
+                        height: Math.round(5 * root.cellScale)
                         color: isCurrent ? root.currentHex
                              : isOccupied ? Qt.alpha(colHex, root.dimOccupied ? 0.45 : 1.0)
                              : "transparent"
@@ -166,8 +201,8 @@ PlasmoidItem {
                     readonly property bool isOccupied: root.occupied[vdInfo.desktopIds[index]] === true
                     readonly property bool isCurrent: vdInfo.currentDesktop === vdInfo.desktopIds[index]
 
-                    width: 10
-                    height: 7
+                    width: Math.round(10 * root.cellScale)
+                    height: Math.round(7 * root.cellScale)
                     radius: 0
                     color: isCurrent ? root.currentHex
                          : isOccupied ? Qt.alpha(colHex, root.dimOccupied ? 0.35 : 1.0)
