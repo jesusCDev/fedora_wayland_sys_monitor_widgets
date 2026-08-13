@@ -23,7 +23,7 @@ Authorization: Bearer $TOKEN
 chatgpt-account-id: $ACC
 EOF
 ) && echo "$BODY" | jq -e '.rate_limit' >/dev/null 2>&1 && {
-            printf '%s' "$BODY" > "$CACHE"
+            printf '%s' "$BODY" > "$CACHE.tmp.$$" && mv "$CACHE.tmp.$$" "$CACHE"
             HIST="${XDG_CACHE_HOME:-$HOME/.cache}/codex-usage-history.tsv"
             printf '%s\t%s\n' "$(date +%s)" "$(echo "$BODY" | jq -r '.rate_limit.primary_window.used_percent // ""')" >> "$HIST"
             if (( $(wc -l < "$HIST") > 2000 )); then

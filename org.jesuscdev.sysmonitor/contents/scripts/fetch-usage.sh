@@ -225,7 +225,7 @@ case "$CODE" in
             --arg tier "$(jq -r '.claudeAiOauth.rateLimitTier // ""' "$CREDS")" \
             '{ok:true, plan:$plan, tier:$tier, fetched_at:(now|floor),
                 fable_access:$fable_access, usage:$usage}' 2>/dev/null) || fail "bad-json"
-        printf '%s' "$BODY" > "$CACHE"
+        printf '%s' "$BODY" > "$CACHE.tmp.$$" && mv "$CACHE.tmp.$$" "$CACHE"
         # Append sample for the popup sparkline (epoch, session %, weekly %)
         HIST="${XDG_CACHE_HOME:-$HOME/.cache}/claude-usage-history.tsv"
         SP=$(echo "$BODY" | jq -r '[.limits[]? | select(.kind=="session") | .percent][0] // ""')

@@ -518,9 +518,9 @@ PlasmoidItem {
     property int aiTick: 0  // bumped each minute so countdown labels re-render between fetches
     Timer {
         interval: 60000; repeat: true
-        running: (root.aiResetCountdown || root.fableAccessActive()
-            || root.fableAlertState(root.fableLimit()) !== "")
-            && (root.showClaude || root.showCodex)
+        // aiTick drives countdowns, pace lines, staleness dim, and exhausted
+        // displays — run whenever AI segments are shown, regardless of settings
+        running: root.showClaude || root.showCodex
         onTriggered: root.aiTick++
     }
     // countdown text when enabled, else static window label ("5h"/"7d")
@@ -1027,10 +1027,14 @@ PlasmoidItem {
     // ── Burn-rate projection ────────────────────────────────────
     // Linear pace from a history sample 30min–2h old in the same window;
     // returns a clock time only if 100% lands before the window resets.
-    function paceEta(hist, getter, cur, resetsAtMs) {
+    function paceEta(hist, getter, cur, resetsAtMs, windowMs) {
         var tick = aiTick
         if (cur === null || cur === undefined || isNaN(cur) || cur >= 100) return ""
         var now = Date.now() / 1000
+        // Samples from before this window opened belong to the previous
+        // window — a low pre-reset value would fake a slower burn rate.
+        var windowStartSec = (resetsAtMs > 0 && windowMs > 0)
+            ? (resetsAtMs - windowMs) / 1000 : 0
         var ref = null
         for (var i = hist.length - 1; i >= 0; i--) {
             var v = getter(hist[i])
@@ -1038,7 +1042,8 @@ PlasmoidItem {
             var age = now - hist[i].t
             if (age < 1800) continue
             if (age > 7200) break
-            if (v > cur + 0.5) break  // higher than current = sample from before a reset
+            if (hist[i].t < windowStartSec) break
+            if (v > cur + 0.5) break  // fallback reset guard when resets_at is missing
             ref = {t: hist[i].t, v: v}
         }
         if (!ref) return ""
@@ -1055,9 +1060,9 @@ PlasmoidItem {
         var w = claudeLimitByKind("weekly_all")
         var parts = []
         var se = s ? paceEta(claudeHist, function(x){ return x.p }, s.percent,
-            s.resets_at ? new Date(s.resets_at).getTime() : 0) : ""
+            s.resets_at ? new Date(s.resets_at).getTime() : 0, 5 * 3600000) : ""
         var we = w ? paceEta(claudeHist, function(x){ return x.w }, w.percent,
-            w.resets_at ? new Date(w.resets_at).getTime() : 0) : ""
+            w.resets_at ? new Date(w.resets_at).getTime() : 0, 7 * 86400000) : ""
         if (se) parts.push("session hits 100% ~" + se)
         if (we) parts.push("weekly ~" + we)
         return parts.length ? "At current pace — " + parts.join("  ·  ") : ""
@@ -1066,7 +1071,7 @@ PlasmoidItem {
     function codexPaceLine() {
         if (!codexWeekly) return ""
         var eta = paceEta(codexHist, function(x){ return x.p }, codexWeekly.used_percent,
-            codexWeekly.resets_at ? Number(codexWeekly.resets_at) * 1000 : 0)
+            codexWeekly.resets_at ? Number(codexWeekly.resets_at) * 1000 : 0, 7 * 86400000)
         return eta ? "At current pace — weekly hits 100% ~" + eta : ""
     }
 
