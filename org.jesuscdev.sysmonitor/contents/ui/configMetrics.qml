@@ -149,7 +149,7 @@ ScrollView {
         CheckBox {
             id: notifyCheck
             Kirigami.FormData.label: "Alerts:"
-            text: "Notify when Claude session crosses red threshold / resets"
+            text: "Notify once at 100% used (until dismissed) and when usage resets to 0%"
         }
 
         CheckBox {

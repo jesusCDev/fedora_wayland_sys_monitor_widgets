@@ -56,19 +56,24 @@ jq -n --argjson wham "$WHAM" --argjson wham_at "$WHAM_AT" --argjson sess "$SESS"
     ok: (($wham != null) or ($sess != null)),
     plan: ($wham.plan_type // ""),
     weekly: (if $wham != null then {
-        used_percent: ($wham.rate_limit.primary_window.used_percent // 0),
-        resets_at: ($wham.rate_limit.primary_window.reset_at // 0),
+        used_percent: ($wham.rate_limit.primary_window.used_percent // null),
+        resets_at: ($wham.rate_limit.primary_window.reset_at // null),
+        allowed: $wham.rate_limit.allowed,
+        limit_reached: $wham.rate_limit.limit_reached,
         fetched_at: $wham_at
     } else null end),
     session5h: (if $sess != null and $sess.primary != null and ($sess.primary.window_minutes // 0) == 300 then {
-        used_percent: ($sess.primary.used_percent // 0),
-        resets_at: ($sess.primary.resets_at // 0),
+        used_percent: ($sess.primary.used_percent // null),
+        resets_at: ($sess.primary.resets_at // null),
         fetched_at: $sess.fetched_at
     } else null end),
     features: ([$wham.additional_rate_limits[]? | {
         name: (.limit_name // .metered_feature),
-        used_percent: (.rate_limit.primary_window.used_percent // 0),
-        resets_at: (.rate_limit.primary_window.reset_at // 0)
+        metered_feature: (.metered_feature // null),
+        used_percent: (.rate_limit.primary_window.used_percent // null),
+        resets_at: (.rate_limit.primary_window.reset_at // null),
+        allowed: .rate_limit.allowed,
+        limit_reached: .rate_limit.limit_reached
     }])
 }' 2>/dev/null || echo '{"ok":false,"error":"parse"}'
 exit 0

@@ -270,6 +270,26 @@ PlasmoidItem {
                                 return (se ? "5h " + Math.round(se.percent) + "%" : "") + (se && w ? "   ·   " : "") + (w ? "7d " + Math.round(w.percent) + "%" : "")
                             }
                         }
+                        Text {
+                            visible: root.showClaude && root.fableAlertState(root.fableLimit()) !== ""
+                            color: root.fableAccessActive() ? root.claudeCritHex
+                                : (root.claudeStale ? root.claudeDimHex
+                                    : (root.fableAlertState(root.fableLimit()) === "exhausted"
+                                        ? root.claudeCritHex : root.claudeWarnHex))
+                            font.pointSize: 10
+                            font.bold: true
+                            text: "Fable 5"
+                        }
+                        Text {
+                            visible: root.showClaude && root.fableAlertState(root.fableLimit()) !== ""
+                            color: root.fableAccessActive() ? root.claudeCritHex
+                                : (root.claudeStale ? root.claudeDimHex
+                                    : (root.fableAlertState(root.fableLimit()) === "exhausted"
+                                        ? root.claudeCritHex : root.claudeWarnHex))
+                            font.pointSize: 10
+                            font.bold: true
+                            text: root.fableHoverText(root.fableLimit())
+                        }
                         Text { visible: root.showCodex && root.codexWeekly !== null; color: root.codexIconHex; font.pointSize: 10; font.bold: true; text: "Codex" }
                         Text {
                             visible: root.showCodex && root.codexWeekly !== null
@@ -447,6 +467,10 @@ PlasmoidItem {
     property bool claudeStale: false
     property string claudeError: ""
     property double claudeFetchedAt: 0   // epoch seconds
+    property var claudePaidUsageEnabled: null  // true/false when reported, null when unknown
+    // Local Claude Code denial evidence. The usage endpoint can still report a
+    // partial Fable percentage after the model has begun requiring credits.
+    property var claudeFableAccess: ({})
     property var ccDaily: []
     property double ccFetchedAt: 0       // epoch ms
     property bool ccRunning: false
@@ -464,7 +488,9 @@ PlasmoidItem {
     property int aiTick: 0  // bumped each minute so countdown labels re-render between fetches
     Timer {
         interval: 60000; repeat: true
-        running: root.aiResetCountdown && (root.showClaude || root.showCodex)
+        running: (root.aiResetCountdown || root.fableAccessActive()
+            || root.fableAlertState(root.fableLimit()) !== "")
+            && (root.showClaude || root.showCodex)
         onTriggered: root.aiTick++
     }
     // countdown text when enabled, else static window label ("5h"/"7d")
@@ -481,7 +507,9 @@ PlasmoidItem {
     // Notifications + sparkline + on-demand process list
     property bool notifyEnabled: Plasmoid.configuration.notifyEnabled
     property bool showCostPanel: Plasmoid.configuration.showCostPanel
-    property real prevSessionPct: -1
+    property var usageNotificationState: ({version: 1, meters: ({})})
+    property bool usageNotificationStateLoaded: false
+    property bool usageNotificationStateDirty: false
     property var claudeHist: []   // [{t, p}] session % samples, last 24h shown
     property var codexHist: []    // [{t, p}] weekly % samples
     property var topProcs: []     // top 3 by CPU, any process — fetched only on sys-popup open
@@ -496,8 +524,155 @@ PlasmoidItem {
     property real netUpBytes: 0
     property real prevNetTxBytes: 0
 
-    function notify(title, body) {
-        launchSource.connectSource('notify-send -a "AI Usage" -i office-chart-line "' + title + '" "' + body + '"')
+    function shellQuote(value) {
+        return "'" + String(value).split("'").join("'\"'\"'") + "'"
+    }
+
+    function notify(title, body, persistent) {
+        var flags = persistent
+            ? " --urgency=critical --expire-time=0"
+            : " --urgency=normal"
+        launchSource.connectSource("notify-send --app-name 'AI Usage'"
+            + " --icon office-chart-line" + flags + " -- "
+            + shellQuote(title) + " " + shellQuote(body))
+    }
+
+    function loadUsageNotificationState() {
+        var state = null
+        try {
+            state = JSON.parse(String(Plasmoid.configuration.usageNotificationState || "{}"))
+        } catch (e) { state = null }
+        if (!state || state.version !== 1 || !state.meters)
+            state = {version: 1, meters: ({})}
+        usageNotificationState = state
+        usageNotificationStateLoaded = true
+        usageNotificationStateDirty = false
+    }
+
+    function flushUsageNotificationState() {
+        if (!usageNotificationStateLoaded || !usageNotificationStateDirty) return
+        Plasmoid.configuration.usageNotificationState = JSON.stringify(usageNotificationState)
+        Plasmoid.configuration.writeConfig()
+        usageNotificationStateDirty = false
+    }
+
+    function usageResetKey(resetAt) {
+        if (resetAt === null || resetAt === undefined || resetAt === "") return "unknown"
+        var n = Number(resetAt)
+        if (!isNaN(n)) {
+            if (n <= 0) return "unknown"
+            return String(Math.round((n < 100000000000 ? n * 1000 : n) / 60000))
+        }
+        var ms = new Date(String(resetAt)).getTime()
+        return isNaN(ms) ? "unknown" : String(Math.round(ms / 60000))
+    }
+
+    function usageWindowRolled(previousKey, currentKey) {
+        var previousMinute = Number(previousKey)
+        var currentMinute = Number(currentKey)
+        if (isNaN(previousMinute) || isNaN(currentMinute)) return false
+        // Reset timestamps can drift slightly between API samples. Only clear
+        // a full latch after the old boundary actually passed and the server
+        // advanced the window by more than that jitter.
+        return currentMinute > previousMinute + 5
+            && Date.now() / 60000 >= previousMinute - 1
+    }
+
+    function usageResetExpired(resetAt) {
+        var key = usageResetKey(resetAt)
+        return key !== "unknown" && Number(key) < Date.now() / 60000 - 5
+    }
+
+    function usageSampleFresh(fetchedAt) {
+        var fetched = Number(fetchedAt)
+        return !isNaN(fetched) && fetched > 0
+            && Date.now() / 1000 - fetched <= 1800
+    }
+
+    function usageMeterSlug(value) {
+        return String(value || "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "_")
+    }
+
+    function claudeMeterId(l) {
+        if (isFableLimit(l)) return "claude:weekly_scoped:fable"
+        var id = "claude:" + String(l.kind || "unknown")
+        if (l.kind === "weekly_scoped") {
+            var model = l.scope && l.scope.model && l.scope.model.display_name
+            var surface = l.scope && l.scope.surface
+            id += ":" + usageMeterSlug(model) + ":" + usageMeterSlug(surface)
+        }
+        return id
+    }
+
+    function usageResetDetail(resetAt) {
+        var reset = usageResetCountdown(resetAt)
+        return reset && reset !== "now"
+            ? "Usage is available again · next reset in " + reset + "."
+            : "Usage is available again."
+    }
+
+    function usageResetCountdown(resetAt) {
+        var key = usageResetKey(resetAt)
+        return key === "unknown" ? ""
+            : claudeFmtReset(new Date(Number(key) * 60000).toISOString())
+    }
+
+    function usageUnavailableDetail(provider, resetAt) {
+        var reset = usageResetCountdown(resetAt)
+        return provider + " reported that this limit has no usage available."
+            + (reset && reset !== "now" ? " Resets in " + reset + "." : "")
+    }
+
+    // Observe bands, not every percentage point. "full" stays latched until
+    // zero (or a new reset window), preventing 100↔99 rounding from re-alerting.
+    // A meter's first sample is always a silent baseline after upgrades/reloads.
+    function observeUsageMeter(id, label, percent, resetAt, forcedFull, fullDetail) {
+        if (!usageNotificationStateLoaded) return
+        if (usageResetExpired(resetAt)) return
+        var missingPercent = percent === null || percent === undefined || percent === ""
+        if (missingPercent && forcedFull !== true) return
+        var pct = missingPercent ? 100 : Number(percent)
+        if (isNaN(pct)) return
+        var windowKey = usageResetKey(resetAt)
+        var resetCountdown = usageResetCountdown(resetAt)
+        var rawBand = (forcedFull === true || pct >= 100) ? "full"
+            : (pct <= 0 ? "zero" : "active")
+        var meters = usageNotificationState.meters
+        var previous = meters[id]
+
+        if (!previous) {
+            meters[id] = {band: rawBand, window: windowKey}
+            usageNotificationStateDirty = true
+            return
+        }
+
+        var sameWindow = previous.window === windowKey
+        var rolledWindow = !sameWindow && usageWindowRolled(previous.window, windowKey)
+        var nextBand = rawBand
+        var nextWindow = windowKey
+        if (previous.band === "full" && rawBand !== "zero" && !rolledWindow) {
+            nextBand = "full"
+            nextWindow = previous.window
+        }
+
+        var sendFull = notifyEnabled && rawBand === "full"
+            && (previous.band !== "full" || rolledWindow)
+        var sendReset = notifyEnabled && rawBand === "zero" && previous.band !== "zero"
+
+        if (previous.band !== nextBand || previous.window !== nextWindow) {
+            meters[id] = {band: nextBand, window: nextWindow}
+            usageNotificationStateDirty = true
+        }
+        // Commit the event before delivery so a sudden Plasma restart cannot
+        // replay a notification the user has already seen or dismissed.
+        if (sendFull || sendReset) flushUsageNotificationState()
+        if (sendFull)
+            notify(label + " has no usage left",
+                fullDetail || ("100% used."
+                    + (resetCountdown && resetCountdown !== "now"
+                        ? " Resets in " + resetCountdown + "." : "")), true)
+        else if (sendReset)
+            notify(label + " reset to 0%", usageResetDetail(resetAt), false)
     }
 
     // Which section the popup shows: "sys" (middle-click on metrics) or "claude" (click Claude segment)
@@ -543,7 +718,7 @@ PlasmoidItem {
         property string resetTxt
         property string resetColor: "#90CAF9"
         spacing: 10
-        Text { text: lr.label; color: "#FFFFFF"; font.pointSize: 11; Layout.preferredWidth: 160; elide: Text.ElideRight }
+        Text { text: lr.label; color: "#FFFFFF"; font.pointSize: 11; Layout.preferredWidth: 200; elide: Text.ElideRight }
         Item {
             Layout.preferredWidth: 110
             Layout.preferredHeight: 8
@@ -652,9 +827,143 @@ PlasmoidItem {
     function claudeLimitLabel(l) {
         if (l.kind === "session") return "Session (5h)"
         if (l.kind === "weekly_all") return "Weekly (all)"
-        if (l.kind === "weekly_scoped")
-            return "Weekly " + ((l.scope && l.scope.model && l.scope.model.display_name) || "model")
+        if (l.kind === "weekly_scoped") {
+            var modelName = (l.scope && l.scope.model && l.scope.model.display_name) || "model"
+            if (String(modelName).toLowerCase().indexOf("fable") >= 0)
+                return "Fable 5 included (50% cap)"
+            return "Weekly " + modelName
+        }
         return l.kind
+    }
+
+    function isFableLimit(l) {
+        if (!l || l.kind !== "weekly_scoped") return false
+        var modelName = l.scope && l.scope.model && l.scope.model.display_name
+        return !!modelName && String(modelName).toLowerCase().indexOf("fable") >= 0
+    }
+
+    function fableLimitFrom(limits) {
+        var fallback = null
+        for (var i = 0; i < limits.length; i++) {
+            var l = limits[i]
+            if (!isFableLimit(l)) continue
+            if (l.is_active === true) return l
+            if (fallback === null || Number(l.percent || 0) > Number(fallback.percent || 0))
+                fallback = l
+        }
+        return fallback
+    }
+
+    function fableLimit() {
+        return fableLimitFrom(claudeLimits)
+    }
+
+    function fableAccessActive() {
+        var tick = aiTick  // expire the local marker promptly at the weekly reset
+        var access = claudeFableAccess || {}
+        if (access.exhausted !== true || !access.resets_at) return false
+        var resetMs = new Date(String(access.resets_at)).getTime()
+        return !isNaN(resetMs) && resetMs > Date.now()
+    }
+
+    function fableEffectiveReset(l) {
+        if (fableAccessActive() && claudeFableAccess.resets_at)
+            return String(claudeFableAccess.resets_at)
+        return l && l.resets_at ? String(l.resets_at) : ""
+    }
+
+    function fableAlertState(l) {
+        var tick = aiTick  // stop cached API alerts when their weekly window ends
+        // An actual Claude Code model fallback is more authoritative than the
+        // advisory usage meter, which can continue to show less than 100%.
+        if (fableAccessActive()) return "exhausted"
+        if (!l) return ""
+        if (l.resets_at) {
+            var resetMs = new Date(String(l.resets_at)).getTime()
+            if (!isNaN(resetMs) && resetMs <= Date.now()) return ""
+        }
+        var pct = fablePercent(l)
+        var severity = String(l.severity || "").toLowerCase()
+        if (l.limit_reached === true || (!isNaN(pct) && pct >= 100)
+                || severity === "reached" || severity === "exceeded"
+                || severity === "exhausted" || severity === "blocked")
+            return "exhausted"
+        if (severity === "warning" || severity === "critical" || severity === "danger"
+                || (!isNaN(pct) && pct >= claudeCritThreshold))
+            return "warning"
+        return ""
+    }
+
+    function claudeLimitTerminal(l) {
+        if (!l) return false
+        var severity = String(l.severity || "").toLowerCase()
+        return l.limit_reached === true || severity === "reached"
+            || severity === "exceeded" || severity === "exhausted"
+            || severity === "blocked"
+    }
+
+    function claudeLimitColor(l) {
+        if (isFableLimit(l) && fableAccessActive()) return claudeCritHex
+        if (claudeStale) return claudeDimHex
+        if (isFableLimit(l)) {
+            var state = fableAlertState(l)
+            if (state === "exhausted") return claudeCritHex
+            if (state === "warning") return claudeWarnHex
+        }
+        return claudePctColor(Number(l.percent || 0))
+    }
+
+    function fablePercent(l) {
+        if (!l || l.percent === null || l.percent === undefined || l.percent === "") return NaN
+        return Number(l.percent)
+    }
+
+    function fableHoverText(l) {
+        var tick = aiTick
+        var state = fableAlertState(l)
+        if (state === "exhausted") {
+            var reset = claudeFmtReset(fableEffectiveReset(l))
+            if (reset === "now") return "INCLUDED OUT · reset due now"
+            return reset ? "INCLUDED OUT · resets in " + reset
+                : "INCLUDED OUT · until weekly reset"
+        }
+        if (!l) return ""
+        var pct = fablePercent(l)
+        return isNaN(pct) ? "API METER · LOW"
+            : "API meter " + Math.round(pct) + "% · LOW"
+    }
+
+    function fableAlertDetail(l, staleOverride) {
+        var tick = aiTick  // refresh the reset countdown while the popup is open
+        var reset = claudeFmtReset(fableEffectiveReset(l))
+        var resetText = reset === "now" ? " Reset due now."
+            : (reset ? " Resets in " + reset + "." : "")
+        if (fableAccessActive())
+            return "Claude Code reported that Fable 5 requires usage credits."
+                + " Included Fable access is out until the weekly reset."
+                + resetText
+                + fablePaidUsageAdvice()
+        if (!l) return ""
+        var dataStale = staleOverride === undefined ? claudeStale : staleOverride
+        var prefix = dataStale ? "Last known — " : ""
+        if (fableAlertState(l) === "exhausted")
+            return prefix + "The Fable allowance capped at 50% of weekly plan usage is used up."
+                + resetText
+                + fablePaidUsageAdvice()
+        var pct = fablePercent(l)
+        return prefix + (isNaN(pct) ? "The Fable API meter is running low."
+            : "The Fable API meter reports " + Math.round(pct) + "% used.")
+            + " Fable has a separate included allowance capped at 50% of weekly plan usage,"
+            + " and actual access may stop before this meter reaches 100%."
+            + resetText
+    }
+
+    function fablePaidUsageAdvice() {
+        if (claudePaidUsageEnabled === true)
+            return " Paid usage credits are enabled, so further Fable use may be billed."
+        if (claudePaidUsageEnabled === false)
+            return " Switch models until then, or enable paid usage credits."
+        return " Switch models until then unless paid usage credits are enabled."
     }
 
     function claudeFmtReset(iso) {
@@ -1295,12 +1604,64 @@ PlasmoidItem {
                 textFormat: Text.RichText
                 text: '<span style="color:' + root.claudeWarnHex + ';">&#x26A0; cached data — ' + root.claudeError + '</span>'
             }
+            Rectangle {
+                id: fableAlertBanner
+                property var limit: root.fableLimit()
+                property string alertState: root.fableAlertState(fableAlertBanner.limit)
+                property bool reportedOut: root.fableAccessActive()
+                property bool dimmed: root.claudeStale && !fableAlertBanner.reportedOut
+                visible: root.popupMode === "claude" && fableAlertBanner.alertState !== ""
+                Layout.fillWidth: true
+                Layout.preferredWidth: 480
+                implicitHeight: fableAlertColumn.implicitHeight + 20
+                radius: 6
+                color: fableAlertBanner.reportedOut ? "#30EF5350"
+                    : (fableAlertBanner.dimmed ? "#168A8A8A"
+                        : (fableAlertBanner.alertState === "exhausted" ? "#30EF5350" : "#26FF9E45"))
+                border.width: 1
+                border.color: fableAlertBanner.reportedOut ? root.claudeCritHex
+                    : (fableAlertBanner.dimmed ? root.claudeDimHex
+                        : (fableAlertBanner.alertState === "exhausted"
+                            ? root.claudeCritHex : root.claudeWarnHex))
+
+                Column {
+                    id: fableAlertColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: 10
+                    spacing: 3
+
+                    Text {
+                        width: parent.width
+                        color: fableAlertBanner.reportedOut ? root.claudeCritHex
+                            : (fableAlertBanner.dimmed ? root.claudeDimHex
+                            : (fableAlertBanner.alertState === "exhausted"
+                                ? root.claudeCritHex : root.claudeWarnHex)
+                            )
+                        font.pointSize: 11
+                        font.bold: true
+                        text: fableAlertBanner.reportedOut
+                            ? "⚠ Fable 5 included access is out until the weekly reset"
+                            : (fableAlertBanner.alertState === "exhausted"
+                                ? "⚠ Fable 5 included limit reached" + (fableAlertBanner.dimmed ? " (cached)" : "")
+                                : "⚠ Fable 5 included usage is low" + (fableAlertBanner.dimmed ? " (cached)" : ""))
+                    }
+                    Text {
+                        width: parent.width
+                        color: fableAlertBanner.dimmed ? root.claudeDimHex : "#FFFFFF"
+                        font.pointSize: 10
+                        wrapMode: Text.WordWrap
+                        text: root.fableAlertDetail(fableAlertBanner.limit)
+                    }
+                }
+            }
             Repeater {
                 model: root.popupMode === "claude" ? root.claudeLimits : []
                 LimitRow {
                     label: root.claudeLimitLabel(modelData)
                     pct: modelData.percent
-                    barColor: root.claudePctColor(modelData.percent)
+                    barColor: root.claudeLimitColor(modelData)
                     resetTxt: root.claudeFmtReset(modelData.resets_at)
                     resetColor: root.claudeResetHex
                 }
@@ -1822,17 +2183,50 @@ PlasmoidItem {
             if (u.five_hour) newLimits.push({kind: "session", percent: u.five_hour.utilization, resets_at: u.five_hour.resets_at})
             if (u.seven_day) newLimits.push({kind: "weekly_all", percent: u.seven_day.utilization, resets_at: u.seven_day.resets_at})
         }
-        // Threshold / reset notifications (fires only on transitions)
-        var sess = null
-        for (var k = 0; k < newLimits.length; k++)
-            if (newLimits[k].kind === "session") sess = newLimits[k]
-        if (notifyEnabled && sess && prevSessionPct >= 0 && obj.stale !== true) {
-            if (prevSessionPct < claudeCritThreshold && sess.percent >= claudeCritThreshold)
-                notify("Claude session at " + Math.round(sess.percent) + "%", claudeFmtReset(sess.resets_at))
-            if (prevSessionPct >= 20 && sess.percent <= 5)
-                notify("Claude 5h window reset", "Session back to " + Math.round(sess.percent) + "%")
+        // This local Claude Code signal records actual Fable denial. Set it
+        // before classification so it can override a lagging API percentage.
+        if (u.extra_usage && u.extra_usage.is_enabled !== undefined)
+            claudePaidUsageEnabled = u.extra_usage.is_enabled === true
+        claudeFableAccess = obj.fable_access || ({})
+        // Desktop alerts are boundary events only: no Fable low/warning alert.
+        // Fresh API meters baseline silently, then notify once at 100% used and
+        // once when a previously-used meter resets to exactly 0%.
+        var fableReportedOut = fableAccessActive()
+        var selectedFable = fableLimitFrom(newLimits)
+        for (var k = 0; k < newLimits.length; k++) {
+            var meter = newLimits[k]
+            var meterIsFable = isFableLimit(meter)
+            if (meterIsFable || obj.stale === true) continue
+            var meterTerminal = claudeLimitTerminal(meter)
+            observeUsageMeter(claudeMeterId(meter),
+                "Claude " + claudeLimitLabel(meter), meter.percent, meter.resets_at,
+                meterTerminal,
+                meterTerminal ? usageUnavailableDetail("Claude", meter.resets_at) : "")
         }
-        if (sess && obj.stale !== true) prevSessionPct = sess.percent
+        // Select exactly one scoped Fable row. Multiple API rows must never
+        // fight over the canonical state key within the same poll.
+        if (selectedFable && (obj.stale !== true || fableReportedOut))
+        {
+            var fableTerminal = claudeLimitTerminal(selectedFable)
+            observeUsageMeter("claude:weekly_scoped:fable", "Fable 5 allowance",
+                selectedFable.percent, fableEffectiveReset(selectedFable),
+                fableReportedOut || fableTerminal,
+                fableReportedOut ? fableAlertDetail(selectedFable, false)
+                    : (fableTerminal
+                        ? usageUnavailableDetail("Claude", fableEffectiveReset(selectedFable)) : ""))
+        }
+        else if (fableReportedOut)
+            observeUsageMeter("claude:weekly_scoped:fable", "Fable 5 allowance",
+                100, fableEffectiveReset(null), true, fableAlertDetail(null, false))
+        else if (obj.stale !== true
+                && !usageNotificationState.meters["claude:weekly_scoped:fable"]) {
+            var weeklyForFable = null
+            for (var wk = 0; wk < newLimits.length; wk++)
+                if (newLimits[wk].kind === "weekly_all") weeklyForFable = newLimits[wk]
+            observeUsageMeter("claude:weekly_scoped:fable", "Fable 5 allowance",
+                0, weeklyForFable ? weeklyForFable.resets_at : "", false, "")
+        }
+        flushUsageNotificationState()
 
         claudeLimits = newLimits
         claudePlan = obj.plan || ""
@@ -1894,6 +2288,31 @@ PlasmoidItem {
                         root.codexSession = obj.session5h || null
                         root.codexPlan = obj.plan || ""
                         root.codexFeatures = obj.features || []
+                        if (obj.session5h && root.usageSampleFresh(obj.session5h.fetched_at))
+                            root.observeUsageMeter("codex:session5h", "Codex Session (5h)",
+                                obj.session5h.used_percent, obj.session5h.resets_at, false, "")
+                        var weeklyFresh = obj.weekly && root.usageSampleFresh(obj.weekly.fetched_at)
+                        if (weeklyFresh)
+                        {
+                            var weeklyTerminal = obj.weekly.limit_reached === true
+                                || obj.weekly.allowed === false
+                            root.observeUsageMeter("codex:weekly", "Codex Weekly",
+                                obj.weekly.used_percent, obj.weekly.resets_at,
+                                weeklyTerminal, weeklyTerminal
+                                    ? root.usageUnavailableDetail("Codex", obj.weekly.resets_at) : "")
+                        }
+                        var features = obj.features || []
+                        for (var i = 0; weeklyFresh && i < features.length; i++) {
+                            var feature = features[i]
+                            var featureKey = feature.metered_feature || feature.name
+                            var featureTerminal = feature.limit_reached === true
+                                || feature.allowed === false
+                            root.observeUsageMeter("codex:feature:" + root.usageMeterSlug(featureKey),
+                                "Codex " + (feature.name || "feature"), feature.used_percent,
+                                feature.resets_at, featureTerminal, featureTerminal
+                                    ? root.usageUnavailableDetail("Codex", feature.resets_at) : "")
+                        }
+                        root.flushUsageNotificationState()
                     }
                 } catch (e) { /* keep old data */ }
             }
@@ -2070,6 +2489,7 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
+        loadUsageNotificationState()
         refreshAll()
         refreshClaude()
     }
