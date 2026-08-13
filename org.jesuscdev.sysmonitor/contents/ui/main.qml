@@ -796,12 +796,12 @@ PlasmoidItem {
     }
 
     // ── Color definitions ───────────────────────────────────────
-    readonly property string cpuHexNormal: "#42A5F5"    // blue
-    readonly property string gpuHexNormal: "#66BB6A"    // green
-    readonly property string ramHexNormal: "#AB47BC"    // purple
+    readonly property string cpuHexNormal: "#64B5F6"    // blue (400→300: brighter on dark panels)
+    readonly property string gpuHexNormal: "#81C784"    // green
+    readonly property string ramHexNormal: "#BA68C8"    // purple
     readonly property string batHexNormal: "#FDD835"    // yellow
     readonly property string netHexNormal: "#4DD0E1"    // cyan
-    readonly property string diskHexNormal: "#FFA726"   // orange
+    readonly property string diskHexNormal: "#FFB74D"   // orange
     readonly property string uptimeHexNormal: "#B0BEC5" // light gray
 
     readonly property string cpuHexBright: "#80D8FF"
@@ -2430,8 +2430,10 @@ PlasmoidItem {
                     return false
                 }
                 // aggregate multi-process apps (chrome spawns one process per tab etc.)
+                // rows[0] = nproc, rows[1] = ps header
                 var rows = output.split("\n"), agg = {}
-                for (var i = 1; i < rows.length; i++) {
+                var cores = parseInt(rows[0]) || 1
+                for (var i = 2; i < rows.length; i++) {
                     var f = rows[i].trim().split(/\s+/)
                     if (f.length < 4) continue
                     var nm = f.slice(0, f.length - 3).join(" ")
@@ -2445,7 +2447,9 @@ PlasmoidItem {
                 var all = []
                 for (var key in agg) all.push(agg[key])
                 function disp(e) { return e.n > 1 ? e.name + " \u00D7" + e.n : e.name }
-                function cpuRow(e) { return {name: disp(e), v1: e.cpu.toFixed(1) + "%", v2: e.mem.toFixed(1) + "%"} }
+                // ps %cpu is per-core (100 = one full core); divide by core count so
+                // values are share-of-machine and line up with the panel CPU metric
+                function cpuRow(e) { return {name: disp(e), v1: (e.cpu / cores).toFixed(1) + "%", v2: e.mem.toFixed(1) + "%"} }
                 function memRow(e) { return {name: disp(e), v1: e.mem.toFixed(1) + "%", v2: (e.rss / 1048576).toFixed(1) + "G"} }
                 function pick(list, mk, excl) {
                     var out = []
@@ -2466,7 +2470,7 @@ PlasmoidItem {
     }
 
     function refreshProcs() {
-        procSource.connectSource("sh -c 'ps -eo comm,%cpu,%mem,rss --sort=-%cpu | head -60'")
+        procSource.connectSource("sh -c 'nproc; ps -eo comm,%cpu,%mem,rss --sort=-%cpu | head -60'")
     }
 
     onExpandedChanged: {
