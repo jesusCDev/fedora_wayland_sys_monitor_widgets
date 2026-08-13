@@ -1013,6 +1013,7 @@ PlasmoidItem {
     }
 
     function claudeFmtReset(iso) {
+        var tick = aiTick  // every binding using a countdown re-renders each minute
         if (!iso) return ""
         var ms = new Date(iso).getTime() - Date.now()
         if (isNaN(ms) || ms <= 0) return "now"
@@ -1081,9 +1082,15 @@ PlasmoidItem {
 
     // At 100% the useful number is time-to-reset: force the countdown (even
     // with the countdown setting off) and paint the whole part red.
-    function aiWindowHtml(fallback, countdown, pct, pctColor, labelColor) {
-        if (pct >= 100)
-            return '<span style="color:' + claudeCritHex + ';">' + (countdown || fallback) + ' 100%</span>'
+    // Expired countdown means the window already rolled and we're waiting on
+    // fresh data — claiming "now 100%" there would be a lie, show dim instead.
+    function aiWindowHtml(fallback, countdown, pct, pctColor, labelColor, stale) {
+        if (pct >= 100) {
+            if (!countdown || countdown === "now")
+                return '<span style="color:' + claudeDimHex + ';">' + fallback + ' …</span>'
+            return '<span style="color:' + (stale ? claudeDimHex : claudeCritHex) + ';">'
+                + countdown + ' 100%</span>'
+        }
         return '<span style="color:' + labelColor + ';">' + aiWinLabel(fallback, countdown) + ' </span>'
             + '<span style="color:' + pctColor + ';">' + fmtPct(pct) + '</span>'
     }
@@ -1093,8 +1100,8 @@ PlasmoidItem {
         var s = claudeLimitByKind("session")
         var w = claudeLimitByKind("weekly_all")
         var parts = []
-        if (s) parts.push(aiWindowHtml("5h", claudeFmtReset(s.resets_at), s.percent, claudePctColor(s.percent), claudeResetHex))
-        if (w) parts.push(aiWindowHtml("7d", claudeFmtReset(w.resets_at), w.percent, claudePctColor(w.percent), claudeResetHex))
+        if (s) parts.push(aiWindowHtml("5h", claudeFmtReset(s.resets_at), s.percent, claudePctColor(s.percent), claudeResetHex, claudeStale))
+        if (w) parts.push(aiWindowHtml("7d", claudeFmtReset(w.resets_at), w.percent, claudePctColor(w.percent), claudeResetHex, claudeStale))
         var body = parts.length ? parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>')
                                 : '<span style="color:' + claudeDimHex + ';">…</span>'
         return '<b>' + claudeIconHtml() + body + '</b>'
@@ -1156,10 +1163,11 @@ PlasmoidItem {
         var tick = aiTick  // dependency: minute timer refreshes countdowns
         if (codexSession)
             parts.push(aiWindowHtml("5h", fmtEpochReset(codexSession.resets_at), codexSession.used_percent || 0,
-                codexSessionStale() ? claudeDimHex : codexPctColor(codexSession.used_percent || 0), codexLabelHex))
+                codexSessionStale() ? claudeDimHex : codexPctColor(codexSession.used_percent || 0), codexLabelHex,
+                codexSessionStale()))
         if (codexWeekly)
             parts.push(aiWindowHtml("7d", fmtEpochReset(codexWeekly.resets_at), codexWeekly.used_percent || 0,
-                codexPctColor(codexWeekly.used_percent || 0), codexLabelHex))
+                codexPctColor(codexWeekly.used_percent || 0), codexLabelHex, codexOld))
         return '<b>' + codexIconHtml() + parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>') + '</b>'
     }
 
@@ -1181,6 +1189,7 @@ PlasmoidItem {
     }
 
     function fmtEpochReset(epoch) {
+        var tick = aiTick  // every binding using a countdown re-renders each minute
         if (!epoch) return ""
         var ms = epoch * 1000 - Date.now()
         if (ms <= 0) return "now"
