@@ -48,7 +48,8 @@ Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple
 - **Fully configurable** — show/hide each metric, decimal precision, RAM in GB, battery position, separator style, update interval
 - **Generated pixel icons** — chunky per-metric PNG icons (AI-generated masters in `assets/masters/` with prompts; wide subjects rotated vertical for readability at panel size)
 - **Panel-height aware** — fonts and icons scale with panel thickness automatically
-- **Hover tooltips** — per-metric detail on hover: top CPU/RAM processes, real per-app GPU users (DRM fdinfo), network rates, battery detail with screen/keyboard brightness bars and charge thresholds
+- **Hover tooltips** — per-metric detail on hover: top CPU/RAM processes, real per-app GPU users (DRM fdinfo), network rates, battery detail with screen/keyboard brightness bars, charge thresholds, and current display state (refresh rate + EDR)
+- **AC/battery display auto-switch** — on plug/unplug runs `~/.local/bin/power-display-sync` (60 Hz + EDR off on battery, 165 Hz + EDR on when plugged in); script decides from `systemd-ac-power` so runs are idempotent
 - **Click actions** — click a metric to open the matching tool (task manager, Filelight, network/power settings); optional detail popup mode instead
 
 ### Claude & Codex usage tracking

@@ -141,6 +141,15 @@ PlasmoidItem {
                             Layout.preferredWidth: 32; horizontalAlignment: Text.AlignRight
                         }
                     }
+                    // Display auto-switch state (60Hz/EDR-off on battery, 165Hz/EDR-on on AC)
+                    Text {
+                        visible: root.hoverSeg === "bat" && root.dispRefreshHz > 0
+                        color: root.claudeDimHex
+                        font.pointSize: 9
+                        text: "Display " + root.dispRefreshHz + " Hz"
+                            + (root.dispEdr >= 0 ? "   ·   EDR " + (root.dispEdr === 1 ? "on" : "off") : "")
+                            + "   ·   auto (" + (root.batCharging ? "AC" : "battery") + ")"
+                    }
                     // Charge thresholds
                     Text {
                         visible: root.hoverSeg === "bat" && root.batChargeLimit < 100
@@ -382,7 +391,7 @@ PlasmoidItem {
             uptimeSource.connectSource("sh -c \"awk '{print \\$1}' /proc/uptime\"")
         else if (seg === "bat")
             // ponytail: ThinkPad sysfs paths hardcoded, single-laptop widget
-            batInfoSource.connectSource("sh -c \"cat /sys/class/backlight/intel_backlight/brightness /sys/class/backlight/intel_backlight/max_brightness '/sys/class/leds/tpacpi::kbd_backlight/brightness' '/sys/class/leds/tpacpi::kbd_backlight/max_brightness' /sys/class/power_supply/BAT0/charge_control_start_threshold 2>/dev/null\"")
+            batInfoSource.connectSource("sh -c \"cat /sys/class/backlight/intel_backlight/brightness /sys/class/backlight/intel_backlight/max_brightness '/sys/class/leds/tpacpi::kbd_backlight/brightness' '/sys/class/leds/tpacpi::kbd_backlight/max_brightness' /sys/class/power_supply/BAT0/charge_control_start_threshold 2>/dev/null; kscreen-doctor -j 2>/dev/null | jq -r '.outputs[] | select(.name==\\\"eDP-1\\\") | .currentModeId as \\$m | ((.modes[] | select(.id==\\$m) | .refreshRate) | round | tostring) + \\\"|\\\" + ((.edrPolicy // -1) | tostring)'\"")
     }
 
     // Font Awesome
@@ -395,6 +404,12 @@ PlasmoidItem {
     property real ramUsedGB: 0.0
     property real batValue: -1.0    // -1 = no battery detected
     property bool batCharging: false
+    // Display state shown in the battery hover (fetched on hover open)
+    property int dispRefreshHz: 0
+    property int dispEdr: -1        // kscreen edrPolicy: 0 never, 1 always, -1 unknown
+    // AC/battery display auto-switch: script itself decides from systemd-ac-power,
+    // so extra or startup runs are idempotent
+    onBatChargingChanged: launchSource.connectSource("$HOME/.local/bin/power-display-sync")
     property real cpuTemp: 0.0
     property real gpuTemp: 0.0
     property real netDownBytes: 0.0  // bytes/sec download rate
@@ -2095,6 +2110,10 @@ PlasmoidItem {
                 kbdBrightLevel = parseInt(lines[2]) || 0
                 kbdBrightMax = parseInt(lines[3]) || 0
                 batStartThreshold = parseInt(lines[4]) || 0
+                var disp = (lines[5] || "").split("|")
+                dispRefreshHz = parseInt(disp[0]) || 0
+                dispEdr = parseInt(disp[1])
+                if (isNaN(dispEdr)) dispEdr = -1
             }
         }
     }
@@ -2495,5 +2514,8 @@ PlasmoidItem {
         loadUsageNotificationState()
         refreshAll()
         refreshClaude()
+        // startup sync: onBatChargingChanged won't fire if the first battery
+        // sample matches the default (on battery), so run once here
+        launchSource.connectSource("$HOME/.local/bin/power-display-sync")
     }
 }
