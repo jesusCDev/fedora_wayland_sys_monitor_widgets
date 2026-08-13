@@ -1216,12 +1216,17 @@ PlasmoidItem {
         return '<span style="font-family:\'' + faFont.name + '\'; color:' + color + ';">&#x' + unicode + ';</span>&nbsp;'
     }
 
+    // RAM/GPU icon files keep their native wide aspect (height 52, width 52*aspect)
+    // and render wider than tall — rotating them vertical made them unreadable
+    readonly property var metricIconAspect: ({ram: 2.46, gpu: 1.49})
+
     function metricLabel(text, iconUnicode, color, seg) {
         // seg given = generated PNG icon exists for it; battery + net-disconnected stay font glyphs
         if (seg !== undefined && useIcons) {
             // red-tinted variant when the metric is in warn state (only cpu/gpu/ram/disk have one)
             var warn = color === warnHex && ["cpu", "gpu", "ram", "disk"].indexOf(seg) >= 0 ? "-warn" : ""
-            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + warn + ".png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '">&nbsp;'
+            var w = Math.round(root.panelIconPx * (metricIconAspect[seg] || 1))
+            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + warn + ".png") + '" width="' + w + '" height="' + root.panelIconPx + '">&nbsp;'
         }
         if (useIcons && faFont.status === FontLoader.Ready)
             return faIcon(iconUnicode, color)
