@@ -26,6 +26,11 @@ PlasmoidItem {
         ? PlasmaCore.Types.ActiveStatus
         : PlasmaCore.Types.HiddenStatus
 
+    // Panel font scaling: track panel thickness, ~10pt at the default 40px
+    property real panelHeight: 0
+    readonly property real panelPt: panelHeight > 0
+        ? Math.max(10, Math.round(panelHeight * 0.33 * 2) / 2) : 10
+
     readonly property color accent: "#FFD98E"
     readonly property color track: "#33888888"
     readonly property color dim: "#888888"
@@ -54,6 +59,7 @@ PlasmoidItem {
     // ── Panel: one mini bar per job ─────────────────────────────
     compactRepresentation: Item {
         id: compactRoot
+        onHeightChanged: if (height > 0) root.panelHeight = height
         Layout.preferredWidth: barsRow.width
         Layout.minimumWidth: barsRow.width
         Layout.maximumWidth: barsRow.width
@@ -70,9 +76,9 @@ PlasmoidItem {
                     anchors.verticalCenter: parent.verticalCenter
 
                     Rectangle {
-                        width: 46
-                        height: 5
-                        radius: 2.5
+                        width: Math.round(46 * root.panelPt / 10)
+                        height: Math.max(5, Math.round(root.panelPt / 2))
+                        radius: height / 2
                         color: root.track
                         anchors.verticalCenter: parent.verticalCenter
                         Rectangle {
@@ -87,7 +93,7 @@ PlasmoidItem {
                     Text {
                         text: (model.percentage || 0) + "%"
                         color: root.accent
-                        font.pointSize: 10
+                        font.pointSize: root.panelPt
                         font.bold: true
                         anchors.verticalCenter: parent.verticalCenter
                     }

@@ -1111,8 +1111,11 @@ PlasmoidItem {
 
     function metricLabel(text, iconUnicode, color, seg) {
         // seg given = generated PNG icon exists for it; battery + net-disconnected stay font glyphs
-        if (seg !== undefined && useIcons)
-            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + ".png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '">&nbsp;'
+        if (seg !== undefined && useIcons) {
+            // red-tinted variant when the metric is in warn state (only cpu/gpu/ram/disk have one)
+            var warn = color === warnHex && ["cpu", "gpu", "ram", "disk"].indexOf(seg) >= 0 ? "-warn" : ""
+            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + warn + ".png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '">&nbsp;'
+        }
         if (useIcons && faFont.status === FontLoader.Ready)
             return faIcon(iconUnicode, color)
         return text + '&nbsp;'

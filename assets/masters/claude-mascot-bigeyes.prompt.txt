@@ -1,0 +1,11 @@
+Generated 2026-08-12 via image-asset-gen skill (Codex gpt-image-2, --transparent, 1024x1024 request / 1254x1254 actual)
+
+Same prompt as claude-mascot.prompt.txt but with "two large simple dark oval eyes
+taking up much of the face" and Avoid "tiny dot eyes".
+
+Post-processing: model returned black background (ignored #00ff00 chroma request),
+so eyes were keyed away — enclosed transparent holes flood-filled back with
+#1A1A1A, then alpha doubled (min(255, a*2)) to fix semi-transparency.
+
+Derived: contents/icons/claude-mascot.png (52px canvas, subject 40px bottom-anchored)
++ claude-mascot@2x.png (26px).

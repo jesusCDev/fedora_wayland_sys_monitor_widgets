@@ -18,7 +18,9 @@ A minimal, color-coded system monitor widget for the KDE Plasma 6 panel. Display
 
 ## What It Looks Like
 
-![System Monitor Inline screenshot](Screenshot_20260211_062436.png)
+![Panel screenshot](screenshot-panel.png)
+
+Left to right: Claude usage (mascot, 5h/7d countdown), Codex usage, system metrics with generated pixel icons (CPU, GPU, RAM, disk, uptime, network), battery with time estimate.
 
 Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple, **NET** in cyan, **BAT** in yellow. Colors turn **red** when configurable thresholds are hit (or when network is disconnected).
 
