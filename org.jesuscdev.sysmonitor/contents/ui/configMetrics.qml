@@ -24,6 +24,7 @@ ScrollView {
     property alias cfg_showCodex: codexCheck.checked
     property alias cfg_aiResetCountdown: aiResetCheck.checked
     property alias cfg_notifyEnabled: notifyCheck.checked
+    property alias cfg_aiPreWarnEnabled: preWarnCheck.checked
     property alias cfg_showCostPanel: costPanelCheck.checked
     property alias cfg_sysPopupEnabled: sysPopupCheck.checked
     property alias cfg_ccusagePath: ccusagePathField.text
@@ -150,6 +151,12 @@ ScrollView {
             id: notifyCheck
             Kirigami.FormData.label: "Alerts:"
             text: "Notify once at 100% used (until dismissed) and when usage resets to 0%"
+        }
+
+        CheckBox {
+            id: preWarnCheck
+            enabled: notifyCheck.checked
+            text: "Also notify once when a meter first crosses the red threshold"
         }
 
         CheckBox {

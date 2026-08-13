@@ -157,6 +157,9 @@
         <entry name="notifyEnabled" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="aiPreWarnEnabled" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="usageNotificationState" type="String">
             <default>{}</default>
         </entry>

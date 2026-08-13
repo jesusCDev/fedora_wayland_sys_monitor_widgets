@@ -57,7 +57,10 @@ Each metric is color-coded: **CPU** in blue, **GPU** in green, **RAM** in purple
 The panel can also show live AI subscription usage — session (5h) and weekly windows for both Claude and Codex/ChatGPT:
 
 - **Reset countdown** — shows time left until each window resets (e.g. `1h 28m 86%`), or classic `5h`/`7d` labels (toggle in settings)
-- **Color thresholds + one-shot alerts** — usage % turns amber/red at configurable thresholds; optional alerts fire once at 100% used and once when a meter resets to 0% (exhaustion alerts remain until dismissed)
+- **Color thresholds + one-shot alerts** — usage % turns amber/red at configurable thresholds; optional alerts fire once when a meter first crosses the red threshold, once at 100% used, and once when it resets to 0% (exhaustion alerts remain until dismissed; each alert type toggleable in settings)
+- **Burn-rate projection** — popup shows "At current pace — session hits 100% ~10:51 PM" computed from usage history, only when 100% would land before the window resets
+- **Exhausted = countdown** — when a window hits 100%, the panel swaps the % for a red time-to-reset countdown
+- **Stale detection** — Codex 5h data comes from local session logs; when it's over 30 min old it dims instead of pretending to be current
 - **Fable allowance warning** — calls out Fable 5's separate included allowance (the 50%-of-weekly-plan cap); low usage stays in the popup, while a true credits-required fallback produces one persistent exhaustion alert for that weekly window
 - **Local spend** — today / last 7 days / last 30 days cost + tokens from Claude Code logs via [ccusage](https://github.com/ryoppippi/ccusage) (optional; set the command path in settings)
 - **Popup** — click the panel item for full breakdown: all limit windows, usage sparklines, per-model cost, check-now button

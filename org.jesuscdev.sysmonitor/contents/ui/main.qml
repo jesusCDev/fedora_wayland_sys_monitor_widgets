@@ -536,6 +536,8 @@ PlasmoidItem {
 
     // Notifications + sparkline + on-demand process list
     property bool notifyEnabled: Plasmoid.configuration.notifyEnabled
+    // !== false so instances created before this key existed default to on
+    property bool aiPreWarn: Plasmoid.configuration.aiPreWarnEnabled !== false
     property bool showCostPanel: Plasmoid.configuration.showCostPanel
     property var usageNotificationState: ({version: 1, meters: ({})})
     property bool usageNotificationStateLoaded: false
@@ -666,7 +668,8 @@ PlasmoidItem {
         var windowKey = usageResetKey(resetAt)
         var resetCountdown = usageResetCountdown(resetAt)
         var rawBand = (forcedFull === true || pct >= 100) ? "full"
-            : (pct <= 0 ? "zero" : "active")
+            : (pct >= claudeCritThreshold ? "high"
+            : (pct <= 0 ? "zero" : "active"))
         var meters = usageNotificationState.meters
         var previous = meters[id]
 
@@ -680,13 +683,21 @@ PlasmoidItem {
         var rolledWindow = !sameWindow && usageWindowRolled(previous.window, windowKey)
         var nextBand = rawBand
         var nextWindow = windowKey
+        // Latch full and high until a real reset — %-rounding jitter at the
+        // 99↔100 or 89↔90 boundary must not re-alert.
         if (previous.band === "full" && rawBand !== "zero" && !rolledWindow) {
             nextBand = "full"
             nextWindow = previous.window
+        } else if (previous.band === "high" && rawBand === "active" && !rolledWindow) {
+            nextBand = "high"
+            nextWindow = previous.window
         }
 
+        var wasBelowHigh = previous.band === "active" || previous.band === "zero"
         var sendFull = notifyEnabled && rawBand === "full"
             && (previous.band !== "full" || rolledWindow)
+        var sendHigh = notifyEnabled && aiPreWarn && rawBand === "high"
+            && (wasBelowHigh || rolledWindow)
         var sendReset = notifyEnabled && rawBand === "zero" && previous.band !== "zero"
 
         if (previous.band !== nextBand || previous.window !== nextWindow) {
@@ -695,12 +706,17 @@ PlasmoidItem {
         }
         // Commit the event before delivery so a sudden Plasma restart cannot
         // replay a notification the user has already seen or dismissed.
-        if (sendFull || sendReset) flushUsageNotificationState()
+        if (sendFull || sendHigh || sendReset) flushUsageNotificationState()
         if (sendFull)
             notify(label + " has no usage left",
                 fullDetail || ("100% used."
                     + (resetCountdown && resetCountdown !== "now"
                         ? " Resets in " + resetCountdown + "." : "")), true)
+        else if (sendHigh)
+            notify(label + " at " + Math.round(pct) + "%",
+                "Running low."
+                    + (resetCountdown && resetCountdown !== "now"
+                        ? " Resets in " + resetCountdown + "." : ""), false)
         else if (sendReset)
             notify(label + " reset to 0%", usageResetDetail(resetAt), false)
     }
@@ -1008,8 +1024,63 @@ PlasmoidItem {
         return (m % 60) + "m"
     }
 
+    // ── Burn-rate projection ────────────────────────────────────
+    // Linear pace from a history sample 30min–2h old in the same window;
+    // returns a clock time only if 100% lands before the window resets.
+    function paceEta(hist, getter, cur, resetsAtMs) {
+        var tick = aiTick
+        if (cur === null || cur === undefined || isNaN(cur) || cur >= 100) return ""
+        var now = Date.now() / 1000
+        var ref = null
+        for (var i = hist.length - 1; i >= 0; i--) {
+            var v = getter(hist[i])
+            if (isNaN(v)) continue
+            var age = now - hist[i].t
+            if (age < 1800) continue
+            if (age > 7200) break
+            if (v > cur + 0.5) break  // higher than current = sample from before a reset
+            ref = {t: hist[i].t, v: v}
+        }
+        if (!ref) return ""
+        var rate = (cur - ref.v) / ((now - ref.t) / 60)  // % per minute
+        if (rate <= 0.01) return ""
+        var etaMin = (100 - cur) / rate
+        var etaMs = Date.now() + etaMin * 60000
+        if (resetsAtMs > 0 && etaMs >= resetsAtMs) return ""
+        return Qt.formatDateTime(new Date(etaMs), etaMin > 1440 ? "ddd h:mm AP" : "h:mm AP")
+    }
+
+    function claudePaceLine() {
+        var s = claudeLimitByKind("session")
+        var w = claudeLimitByKind("weekly_all")
+        var parts = []
+        var se = s ? paceEta(claudeHist, function(x){ return x.p }, s.percent,
+            s.resets_at ? new Date(s.resets_at).getTime() : 0) : ""
+        var we = w ? paceEta(claudeHist, function(x){ return x.w }, w.percent,
+            w.resets_at ? new Date(w.resets_at).getTime() : 0) : ""
+        if (se) parts.push("session hits 100% ~" + se)
+        if (we) parts.push("weekly ~" + we)
+        return parts.length ? "At current pace — " + parts.join("  ·  ") : ""
+    }
+
+    function codexPaceLine() {
+        if (!codexWeekly) return ""
+        var eta = paceEta(codexHist, function(x){ return x.p }, codexWeekly.used_percent,
+            codexWeekly.resets_at ? Number(codexWeekly.resets_at) * 1000 : 0)
+        return eta ? "At current pace — weekly hits 100% ~" + eta : ""
+    }
+
     function claudeIconHtml() {
         return '<img src="' + Qt.resolvedUrl("../icons/claude-mascot.png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '"> '
+    }
+
+    // At 100% the useful number is time-to-reset: force the countdown (even
+    // with the countdown setting off) and paint the whole part red.
+    function aiWindowHtml(fallback, countdown, pct, pctColor, labelColor) {
+        if (pct >= 100)
+            return '<span style="color:' + claudeCritHex + ';">' + (countdown || fallback) + ' 100%</span>'
+        return '<span style="color:' + labelColor + ';">' + aiWinLabel(fallback, countdown) + ' </span>'
+            + '<span style="color:' + pctColor + ';">' + fmtPct(pct) + '</span>'
     }
 
     function claudeItemHtml() {
@@ -1017,10 +1088,8 @@ PlasmoidItem {
         var s = claudeLimitByKind("session")
         var w = claudeLimitByKind("weekly_all")
         var parts = []
-        if (s) parts.push('<span style="color:' + claudeResetHex + ';">' + aiWinLabel("5h", claudeFmtReset(s.resets_at)) + ' </span>'
-            + '<span style="color:' + claudePctColor(s.percent) + ';">' + fmtPct(s.percent) + '</span>')
-        if (w) parts.push('<span style="color:' + claudeResetHex + ';">' + aiWinLabel("7d", claudeFmtReset(w.resets_at)) + ' </span>'
-            + '<span style="color:' + claudePctColor(w.percent) + ';">' + fmtPct(w.percent) + '</span>')
+        if (s) parts.push(aiWindowHtml("5h", claudeFmtReset(s.resets_at), s.percent, claudePctColor(s.percent), claudeResetHex))
+        if (w) parts.push(aiWindowHtml("7d", claudeFmtReset(w.resets_at), w.percent, claudePctColor(w.percent), claudeResetHex))
         var body = parts.length ? parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>')
                                 : '<span style="color:' + claudeDimHex + ';">…</span>'
         return '<b>' + claudeIconHtml() + body + '</b>'
@@ -1043,7 +1112,7 @@ PlasmoidItem {
 
     function codexRowsList() {
         var out = []
-        if (codexSession) out.push({label: "Session (5h)", pct: codexSession.used_percent || 0, resets_at: codexSession.resets_at})
+        if (codexSession) out.push({label: "Session (5h)" + (codexSessionStale() ? " — stale" : ""), pct: codexSession.used_percent || 0, resets_at: codexSession.resets_at, stale: codexSessionStale()})
         if (codexWeekly) out.push({label: "Weekly (account)", pct: codexWeekly.used_percent || 0, resets_at: codexWeekly.resets_at})
         for (var i = 0; i < codexFeatures.length; i++)
             out.push({label: codexFeatures[i].name, pct: codexFeatures[i].used_percent || 0, resets_at: codexFeatures[i].resets_at})
@@ -1067,17 +1136,25 @@ PlasmoidItem {
         }
     }
 
+    // Codex 5h data comes from local codex session logs — it goes stale on its
+    // own schedule (no codex run in a while), independent of the weekly fetch.
+    function codexSessionStale() {
+        var tick = aiTick
+        return codexSession && codexSession.fetched_at
+            && (Date.now() / 1000 - Number(codexSession.fetched_at)) > 1800
+    }
+
     function codexItemHtml() {
         if (!codexWeekly && !codexSession)
             return '<b>' + codexIconHtml() + '<span style="color:' + claudeDimHex + ';">…</span></b>'
         var parts = []
         var tick = aiTick  // dependency: minute timer refreshes countdowns
         if (codexSession)
-            parts.push('<span style="color:' + codexLabelHex + ';">' + aiWinLabel("5h", fmtEpochReset(codexSession.resets_at)) + ' </span>'
-                + '<span style="color:' + codexPctColor(codexSession.used_percent || 0) + ';">' + fmtPct(codexSession.used_percent || 0) + '</span>')
+            parts.push(aiWindowHtml("5h", fmtEpochReset(codexSession.resets_at), codexSession.used_percent || 0,
+                codexSessionStale() ? claudeDimHex : codexPctColor(codexSession.used_percent || 0), codexLabelHex))
         if (codexWeekly)
-            parts.push('<span style="color:' + codexLabelHex + ';">' + aiWinLabel("7d", fmtEpochReset(codexWeekly.resets_at)) + ' </span>'
-                + '<span style="color:' + codexPctColor(codexWeekly.used_percent || 0) + ';">' + fmtPct(codexWeekly.used_percent || 0) + '</span>')
+            parts.push(aiWindowHtml("7d", fmtEpochReset(codexWeekly.resets_at), codexWeekly.used_percent || 0,
+                codexPctColor(codexWeekly.used_percent || 0), codexLabelHex))
         return '<b>' + codexIconHtml() + parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>') + '</b>'
     }
 
@@ -1699,6 +1776,12 @@ PlasmoidItem {
                     resetColor: root.claudeResetHex
                 }
             }
+            Text {
+                visible: root.popupMode === "claude" && root.claudePaceLine() !== ""
+                color: root.claudeWarnHex
+                font.pointSize: 9
+                text: root.claudePaceLine()
+            }
             RowLayout {
                 visible: root.popupMode === "claude" && root.claudeHist.length > 1
                 spacing: 10
@@ -1758,10 +1841,16 @@ PlasmoidItem {
                 LimitRow {
                     label: modelData.label
                     pct: modelData.pct
-                    barColor: root.codexPctColor(modelData.pct)
+                    barColor: modelData.stale ? root.claudeDimHex : root.codexPctColor(modelData.pct)
                     resetTxt: root.fmtEpochReset(modelData.resets_at)
                     resetColor: root.codexResetHex
                 }
+            }
+            Text {
+                visible: root.popupMode === "claude" && root.showCodex && root.codexPaceLine() !== ""
+                color: root.claudeWarnHex
+                font.pointSize: 9
+                text: root.codexPaceLine()
             }
             RowLayout {
                 visible: root.popupMode === "claude" && root.showCodex && root.codexHist.length > 1
@@ -2395,7 +2484,7 @@ PlasmoidItem {
             var f = ln.split("\t")
             var t = parseInt(f[0]); var pv = parseFloat(f[1])
             if (isNaN(t) || isNaN(pv)) continue
-            if (mode === "c") ch.push({t: t, p: pv})
+            if (mode === "c") ch.push({t: t, p: pv, w: parseFloat(f[2])})
             else if (mode === "x") xh.push({t: t, p: pv})
         }
         claudeHist = ch
