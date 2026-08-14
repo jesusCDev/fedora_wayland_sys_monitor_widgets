@@ -405,12 +405,21 @@ PlasmoidItem {
         else if (seg === "uptime")
             uptimeSource.connectSource("sh -c \"awk '{print \\$1}' /proc/uptime\"")
         else if (seg === "bat")
-            // ponytail: ThinkPad sysfs paths hardcoded, single-laptop widget
-            batInfoSource.connectSource("sh -c \"cat /sys/class/backlight/intel_backlight/brightness /sys/class/backlight/intel_backlight/max_brightness '/sys/class/leds/tpacpi::kbd_backlight/brightness' '/sys/class/leds/tpacpi::kbd_backlight/max_brightness' /sys/class/power_supply/BAT0/charge_control_start_threshold 2>/dev/null; kscreen-doctor -j 2>/dev/null | jq -r '.outputs[] | select(.name==\\\"eDP-1\\\") | .currentModeId as \\$m | ((.modes[] | select(.id==\\$m) | .refreshRate) | round | tostring) + \\\"|\\\" + ((.edrPolicy // -1) | tostring)'\"")
+            batInfoSource.connectSource("sh -c \"cat /sys/class/backlight/" + hwBacklight + "/brightness /sys/class/backlight/" + hwBacklight + "/max_brightness '/sys/class/leds/" + hwKbdLed + "/brightness' '/sys/class/leds/" + hwKbdLed + "/max_brightness' /sys/class/power_supply/" + hwBat + "/charge_control_start_threshold 2>/dev/null; kscreen-doctor -j 2>/dev/null | jq -r '.outputs[] | select(.name==\\\"" + hwEdp + "\\\") | .currentModeId as \\$m | ((.modes[] | select(.id==\\$m) | .refreshRate) | round | tostring) + \\\"|\\\" + ((.edrPolicy // -1) | tostring)'\"")
     }
 
     // Font Awesome
     FontLoader { id: faFont; source: "../fonts/fa-solid-900.ttf" }
+
+    // Hardware names/paths, probed once at startup (defaults = this ThinkPad,
+    // used until the probe returns or if it finds nothing)
+    property string hwBat: "BAT0"
+    property string hwAc: "AC"
+    property string hwBacklight: "intel_backlight"
+    property string hwKbdLed: "tpacpi::kbd_backlight"
+    property string hwCpuTempFile: "/dev/null"
+    property string hwGpuTempFile: "/dev/null"
+    property string hwEdp: "eDP-1"
 
     // Current values (raw decimals)
     property real cpuValue: 0.0
@@ -2007,6 +2016,55 @@ PlasmoidItem {
         }
     }
 
+    // ── Hardware probe (runs once at startup) ───────────────────
+    PlasmaSupport.DataSource {
+        id: hwProbeSource
+        engine: "executable"
+        connectedSources: []
+        property var buffers: ({})
+        onNewData: function(source, data) {
+            var chunk = data["stdout"] || ""
+            buffers[source] = (buffers[source] || "") + chunk
+            if (data["exit code"] !== undefined) {
+                var output = (buffers[source] || "")
+                delete buffers[source]
+                disconnectSource(source)
+                parseHwProbe(output)
+            }
+        }
+    }
+
+    function probeHardware() {
+        hwProbeSource.connectSource("sh -c '" +
+            "for b in /sys/class/power_supply/BAT* /sys/class/power_supply/CMB*; do [ -e \"$b/capacity\" ] && echo \"BAT ${b##*/}\" && break; done; " +
+            "for a in /sys/class/power_supply/*; do [ -e \"$a/online\" ] && echo \"AC ${a##*/}\" && break; done; " +
+            "for l in /sys/class/backlight/*; do [ -e \"$l/brightness\" ] && echo \"BL ${l##*/}\" && break; done; " +
+            "for k in /sys/class/leds/*kbd_backlight*; do [ -e \"$k/brightness\" ] && echo \"KBD ${k##*/}\" && break; done; " +
+            "for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name 2>/dev/null); case $n in coretemp|k10temp|zenpower) echo \"CPUT $d/temp1_input\";; thinkpad) echo \"GPUT thinkpad $d/temp2_input\";; amdgpu|nouveau|radeon) echo \"GPUT $n $d/temp1_input\";; esac; done; " +
+            "e=$(kscreen-doctor -j 2>/dev/null | jq -r \"first(.outputs[].name|select(startswith(\\\"eDP\\\") or startswith(\\\"LVDS\\\"))) // empty\"); [ -n \"$e\" ] && echo \"EDP $e\"; true'")
+    }
+
+    function parseHwProbe(output) {
+        var lines = output.split("\n")
+        var gpuCands = []
+        for (var i = 0; i < lines.length; i++) {
+            var f = lines[i].trim().split(/\s+/)
+            if (f.length < 2) continue
+            if (f[0] === "BAT") hwBat = f[1]
+            else if (f[0] === "AC") hwAc = f[1]
+            else if (f[0] === "BL") hwBacklight = f[1]
+            else if (f[0] === "KBD") hwKbdLed = f[1]
+            else if (f[0] === "CPUT") hwCpuTempFile = f[1]
+            else if (f[0] === "EDP") hwEdp = f[1]
+            else if (f[0] === "GPUT" && f.length >= 3) gpuCands.push({name: f[1], file: f[2]})
+        }
+        // thinkpad EC reading preferred (survives dGPU driver hwmon coming/going)
+        for (var j = 0; j < gpuCands.length; j++) {
+            if (hwGpuTempFile === "/dev/null" || gpuCands[j].name === "thinkpad")
+                hwGpuTempFile = gpuCands[j].file
+        }
+    }
+
     // ── Aggregated per-tick sampler ─────────────────────────────
     // One sh per tick instead of one per metric; sections labeled @NAME
     PlasmaSupport.DataSource {
@@ -2575,9 +2633,9 @@ PlasmoidItem {
         if (showRam)
             parts.push("echo @RAM; head -3 /proc/meminfo")
         if (showBat || batteryModeEnabled)
-            parts.push("echo @BAT; cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); cl=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"")
+            parts.push("echo @BAT; b=/sys/class/power_supply/" + hwBat + "; cap=$(cat $b/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/" + hwAc + "/online 2>/dev/null || echo 0); en=$(cat $b/energy_now 2>/dev/null || echo 0); ef=$(cat $b/energy_full 2>/dev/null || echo 0); pw=$(cat $b/power_now 2>/dev/null || echo 0); cl=$(cat $b/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"")
         if (showCpuTemp || showGpuTemp)
-            parts.push("echo @TEMP; ct=0; gt=0; for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name 2>/dev/null); if [ \"$n\" = \"coretemp\" ]; then v=$(cat $d/temp1_input 2>/dev/null); [ -n \"$v\" ] && ct=$((v/1000)); fi; if [ \"$n\" = \"thinkpad\" ]; then v=$(cat $d/temp2_input 2>/dev/null); [ -n \"$v\" ] && gt=$((v/1000)); fi; done; echo \"$ct $gt\"")
+            parts.push("echo @TEMP; v=$(cat " + hwCpuTempFile + " 2>/dev/null); ct=$(( ${v:-0} / 1000 )); v=$(cat " + hwGpuTempFile + " 2>/dev/null); gt=$(( ${v:-0} / 1000 )); echo \"$ct $gt\"")
         if (showNet)
             parts.push("echo @NET; read rx tx <<< $(awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); r+=\\$2; t+=\\$10} END{print r+0, t+0}\" /proc/net/dev); up=0; grep -qx up /sys/class/net/*/operstate 2>/dev/null && up=1; echo \"$rx|$tx|$up\"")
         if (showDisk)
@@ -2590,6 +2648,7 @@ PlasmoidItem {
 
     Component.onCompleted: {
         loadUsageNotificationState()
+        probeHardware()
         refreshAll()
         refreshClaude()
         // startup sync: onBatChargingChanged won't fire if the first battery

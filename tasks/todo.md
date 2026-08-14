@@ -13,9 +13,11 @@
   `@DISK`/`@UP` markers), single `sampleSource` DataSource parses once and routes
   to the existing parse functions. 5 per-tick DataSources deleted; hover/popup
   on-demand sources (disk, uptime, batInfo) untouched.
-- [ ] **Hardware auto-detection** — hwmon paths, `eDP-1`, backlight, `BAT0`,
-  `intel_backlight`, `thinkpad` hwmon all hardcoded. One startup probe with
-  cached result makes the repo reusable by others (it's public).
+- [x] **Hardware auto-detection** — done 2026-08-13: `probeHardware()` runs one
+  shell probe at startup (battery/AC/backlight/kbd-LED names, CPU temp hwmon
+  file incl. k10temp/zenpower, GPU temp file preferring thinkpad EC over
+  amdgpu/nouveau/radeon, internal display via kscreen-doctor). Results in `hw*`
+  properties, ThinkPad values as defaults. No cache — probe is milliseconds.
 - [ ] **Light-panel safety** — all colors assume a dark panel. Either a
   theme-aware fallback palette or a README warning.
 - [ ] **Workspace tooltip cap** — "+N more" after ~4 apps per workspace row.
