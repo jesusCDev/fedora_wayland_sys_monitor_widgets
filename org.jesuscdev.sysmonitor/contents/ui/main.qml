@@ -1575,7 +1575,9 @@ PlasmoidItem {
                             root.netConnected ? 'net' : undefined) + '</span></b>'
                     valueHtml: '<b><span style="color:' + root.netHex + ';">'
                         + (root.netConnected ? root.fmtNetSpeed(root.netDownBytes) : 'OFF') + '</span></b>'
-                    maxValue: '999.9M/s'
+                    // 99.9M/s not 999.9M/s: one less digit of dead space before
+                    // the battery divider; >100M/s just widens the item briefly
+                    maxValue: '99.9M/s'
                 }
 
                 Text {
