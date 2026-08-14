@@ -1402,7 +1402,7 @@ PlasmoidItem {
 
     function batSepHtml() {
         if (showBatSpacer)
-            return '&nbsp;&nbsp;&nbsp;<span style="color:#888888;">&#x2502;</span>&nbsp;&nbsp;&nbsp;'
+            return '&nbsp;<span style="color:#888888;">&#x2502;</span>&nbsp;'
         var s = ''
         for (var i = 0; i < itemSpacing; i++) s += '&nbsp;'
         return s
