@@ -8,9 +8,11 @@
   (window rolled, awaiting fresh data) and dim red when data is stale.
 
 ## Improvements (ranked)
-- [ ] **Single aggregated sampler** — sysmonitor spawns up to ~6 `sh` processes
-  per tick (one per enabled metric). Merge into one command emitting labeled
-  sections, parse once. 6x fewer forks; battery win at 1s polling. (~1h)
+- [x] **Single aggregated sampler** — done 2026-08-13: `refreshAll()` builds one
+  `sh -c` command from enabled sections (`@CPU`/`@RAM`/`@BAT`/`@TEMP`/`@NET`/
+  `@DISK`/`@UP` markers), single `sampleSource` DataSource parses once and routes
+  to the existing parse functions. 5 per-tick DataSources deleted; hover/popup
+  on-demand sources (disk, uptime, batInfo) untouched.
 - [ ] **Hardware auto-detection** — hwmon paths, `eDP-1`, backlight, `BAT0`,
   `intel_backlight`, `thinkpad` hwmon all hardcoded. One startup probe with
   cached result makes the repo reusable by others (it's public).

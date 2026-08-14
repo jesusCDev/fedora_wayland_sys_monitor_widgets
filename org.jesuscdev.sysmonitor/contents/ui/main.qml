@@ -2007,9 +2007,10 @@ PlasmoidItem {
         }
     }
 
-    // ── CPU data source ─────────────────────────────────────────
+    // ── Aggregated per-tick sampler ─────────────────────────────
+    // One sh per tick instead of one per metric; sections labeled @NAME
     PlasmaSupport.DataSource {
-        id: cpuSource
+        id: sampleSource
         engine: "executable"
         connectedSources: []
         property var buffers: ({})
@@ -2017,12 +2018,29 @@ PlasmoidItem {
             var chunk = data["stdout"] || ""
             buffers[source] = (buffers[source] || "") + chunk
             if (data["exit code"] !== undefined) {
-                var output = (buffers[source] || "").trim()
+                var output = (buffers[source] || "")
                 delete buffers[source]
                 disconnectSource(source)
-                parseCpuData(output)
+                parseSample(output)
             }
         }
+    }
+
+    function parseSample(output) {
+        var lines = output.split("\n")
+        var sec = "", body = {}
+        for (var i = 0; i < lines.length; i++) {
+            var ln = lines[i]
+            if (ln.charAt(0) === "@") { sec = ln.slice(1).trim(); body[sec] = [] }
+            else if (sec) body[sec].push(ln)
+        }
+        if (body["CPU"])  parseCpuData((body["CPU"][0] || "").trim())
+        if (body["RAM"])  parseRamData(body["RAM"].join("\n").trim())
+        if (body["BAT"])  parseBatData((body["BAT"][0] || "").trim())
+        if (body["TEMP"]) parseTempData((body["TEMP"][0] || "").trim())
+        if (body["NET"])  parseNetData((body["NET"][0] || "").trim())
+        if (body["DISK"]) parseDiskData((body["DISK"][0] || "").trim())
+        if (body["UP"])   uptimeSecs = parseFloat(body["UP"][0]) || 0
     }
 
     function parseCpuData(line) {
@@ -2053,24 +2071,6 @@ PlasmoidItem {
         cpuFirstRun = false
         prevCpuIdle = totalIdle
         prevCpuTotal = total
-    }
-
-    // ── RAM data source ─────────────────────────────────────────
-    PlasmaSupport.DataSource {
-        id: ramSource
-        engine: "executable"
-        connectedSources: []
-        property var buffers: ({})
-        onNewData: function(source, data) {
-            var chunk = data["stdout"] || ""
-            buffers[source] = (buffers[source] || "") + chunk
-            if (data["exit code"] !== undefined) {
-                var output = (buffers[source] || "").trim()
-                delete buffers[source]
-                disconnectSource(source)
-                parseRamData(output)
-            }
-        }
     }
 
     function parseRamData(output) {
@@ -2105,24 +2105,6 @@ PlasmoidItem {
         }
     }
 
-    // ── Temperature data source ──────────────────────────────────
-    PlasmaSupport.DataSource {
-        id: tempSource
-        engine: "executable"
-        connectedSources: []
-        property var buffers: ({})
-        onNewData: function(source, data) {
-            var chunk = data["stdout"] || ""
-            buffers[source] = (buffers[source] || "") + chunk
-            if (data["exit code"] !== undefined) {
-                var output = (buffers[source] || "").trim()
-                delete buffers[source]
-                disconnectSource(source)
-                parseTempData(output)
-            }
-        }
-    }
-
     function parseTempData(output) {
         var parts = output.split(/\s+/)
         if (parts.length >= 1) {
@@ -2132,24 +2114,6 @@ PlasmoidItem {
         if (parts.length >= 2) {
             var gt = parseFloat(parts[1])
             if (!isNaN(gt)) gpuTemp = gt
-        }
-    }
-
-    // ── Network data source ──────────────────────────────────────
-    PlasmaSupport.DataSource {
-        id: netSource
-        engine: "executable"
-        connectedSources: []
-        property var buffers: ({})
-        onNewData: function(source, data) {
-            var chunk = data["stdout"] || ""
-            buffers[source] = (buffers[source] || "") + chunk
-            if (data["exit code"] !== undefined) {
-                var output = (buffers[source] || "").trim()
-                delete buffers[source]
-                disconnectSource(source)
-                parseNetData(output)
-            }
         }
     }
 
@@ -2186,13 +2150,17 @@ PlasmoidItem {
                 var output = (buffers[source] || "").trim()
                 delete buffers[source]
                 disconnectSource(source)
-                var f = output.split(/\s+/)
-                diskValue = parseInt(f[0]) || 0
-                if (f.length >= 3) {
-                    diskTotalG = parseInt(f[1]) || 0
-                    diskUsedG = parseInt(f[2]) || 0
-                }
+                parseDiskData(output)
             }
+        }
+    }
+
+    function parseDiskData(output) {
+        var f = output.split(/\s+/)
+        diskValue = parseInt(f[0]) || 0
+        if (f.length >= 3) {
+            diskTotalG = parseInt(f[1]) || 0
+            diskUsedG = parseInt(f[2]) || 0
         }
     }
 
@@ -2241,45 +2209,31 @@ PlasmoidItem {
         }
     }
 
-    // ── Battery data source ─────────────────────────────────────
-    PlasmaSupport.DataSource {
-        id: batSource
-        engine: "executable"
-        connectedSources: []
-        property var buffers: ({})
-        onNewData: function(source, data) {
-            var chunk = data["stdout"] || ""
-            buffers[source] = (buffers[source] || "") + chunk
-            if (data["exit code"] !== undefined) {
-                var output = (buffers[source] || "").trim()
-                delete buffers[source]
-                disconnectSource(source)
-                var parts = output.split("|")
-                var capStr = parts[0] || "-1"
-                var acStr = (parts[1] || "0").trim()
-                var enNow = (parts[2] || "0").trim()
-                var enFull = (parts[3] || "0").trim()
-                var pwNow = (parts[4] || "0").trim()
-                if (capStr !== "" && capStr !== "-1") {
-                    var val = parseFloat(capStr)
-                    if (!isNaN(val)) {
-                        batValue = val
-                    }
-                } else {
-                    batValue = -1
-                }
-                batCharging = (acStr === "1")
-                batEnergyNow = (parseFloat(enNow) || 0) / 1000000.0
-                batEnergyFull = (parseFloat(enFull) || 0) / 1000000.0
-                batPowerNow = (parseFloat(pwNow) || 0) / 1000000.0
-                var clStr = (parts[5] || "100").trim()
-                var clVal = parseInt(clStr)
-                if (!isNaN(clVal) && clVal > 0 && clVal <= 100)
-                    batChargeLimit = clVal
-                else
-                    batChargeLimit = 100
+    function parseBatData(output) {
+        var parts = output.split("|")
+        var capStr = parts[0] || "-1"
+        var acStr = (parts[1] || "0").trim()
+        var enNow = (parts[2] || "0").trim()
+        var enFull = (parts[3] || "0").trim()
+        var pwNow = (parts[4] || "0").trim()
+        if (capStr !== "" && capStr !== "-1") {
+            var val = parseFloat(capStr)
+            if (!isNaN(val)) {
+                batValue = val
             }
+        } else {
+            batValue = -1
         }
+        batCharging = (acStr === "1")
+        batEnergyNow = (parseFloat(enNow) || 0) / 1000000.0
+        batEnergyFull = (parseFloat(enFull) || 0) / 1000000.0
+        batPowerNow = (parseFloat(pwNow) || 0) / 1000000.0
+        var clStr = (parts[5] || "100").trim()
+        var clVal = parseInt(clStr)
+        if (!isNaN(clVal) && clVal > 0 && clVal <= 100)
+            batChargeLimit = clVal
+        else
+            batChargeLimit = 100
     }
 
     // ── Claude usage data sources ───────────────────────────────
@@ -2613,28 +2567,25 @@ PlasmoidItem {
     }
 
     function refreshAll() {
+        // One aggregated command per tick; fragments must avoid single quotes
+        // (whole thing is wrapped in sh -c '...')
+        var parts = []
         if (showCpu)
-            cpuSource.connectSource("head -1 /proc/stat")
+            parts.push("echo @CPU; head -1 /proc/stat")
         if (showRam)
-            ramSource.connectSource("head -3 /proc/meminfo")
+            parts.push("echo @RAM; head -3 /proc/meminfo")
         if (showBat || batteryModeEnabled)
-            batSource.connectSource("sh -c 'cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); cl=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"'")
-
-        if (showCpuTemp || showGpuTemp) {
-            tempSource.connectSource("sh -c 'ct=0; gt=0; for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name 2>/dev/null); if [ \"$n\" = \"coretemp\" ]; then v=$(cat $d/temp1_input 2>/dev/null); [ -n \"$v\" ] && ct=$((v/1000)); fi; if [ \"$n\" = \"thinkpad\" ]; then v=$(cat $d/temp2_input 2>/dev/null); [ -n \"$v\" ] && gt=$((v/1000)); fi; done; echo \"$ct $gt\"'")
-        }
-
-        if (showNet) {
-            netSource.connectSource("sh -c 'read rx tx <<< $(awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); r+=\\$2; t+=\\$10} END{print r+0, t+0}\" /proc/net/dev); up=0; grep -qx up /sys/class/net/*/operstate 2>/dev/null && up=1; echo \"$rx|$tx|$up\"'")
-        }
-
-        if (showDisk) {
-            diskSource.connectSource("sh -c \"df -BG / --output=pcent,size,used | tail -1 | tr -d '%G'\"")
-        }
-
-        if (showUptime) {
-            uptimeSource.connectSource("sh -c \"awk '{print \\$1}' /proc/uptime\"")
-        }
+            parts.push("echo @BAT; cap=$(cat /sys/class/power_supply/BAT0/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/AC/online 2>/dev/null || echo 0); en=$(cat /sys/class/power_supply/BAT0/energy_now 2>/dev/null || echo 0); ef=$(cat /sys/class/power_supply/BAT0/energy_full 2>/dev/null || echo 0); pw=$(cat /sys/class/power_supply/BAT0/power_now 2>/dev/null || echo 0); cl=$(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"")
+        if (showCpuTemp || showGpuTemp)
+            parts.push("echo @TEMP; ct=0; gt=0; for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name 2>/dev/null); if [ \"$n\" = \"coretemp\" ]; then v=$(cat $d/temp1_input 2>/dev/null); [ -n \"$v\" ] && ct=$((v/1000)); fi; if [ \"$n\" = \"thinkpad\" ]; then v=$(cat $d/temp2_input 2>/dev/null); [ -n \"$v\" ] && gt=$((v/1000)); fi; done; echo \"$ct $gt\"")
+        if (showNet)
+            parts.push("echo @NET; read rx tx <<< $(awk \"NR>2 && \\$1 !~ /lo:/{gsub(/:/,\\\"\\\",\\$1); r+=\\$2; t+=\\$10} END{print r+0, t+0}\" /proc/net/dev); up=0; grep -qx up /sys/class/net/*/operstate 2>/dev/null && up=1; echo \"$rx|$tx|$up\"")
+        if (showDisk)
+            parts.push("echo @DISK; df -BG / --output=pcent,size,used | tail -1 | tr -d \"%G\"")
+        if (showUptime)
+            parts.push("echo @UP; cut -d\" \" -f1 /proc/uptime")
+        if (parts.length)
+            sampleSource.connectSource("sh -c '" + parts.join("; ") + "'")
     }
 
     Component.onCompleted: {
