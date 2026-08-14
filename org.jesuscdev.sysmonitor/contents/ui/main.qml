@@ -230,7 +230,7 @@ PlasmoidItem {
                         visible: root.hoverSeg === "net" && root.netIface !== ""
                         color: root.claudeDimHex
                         font.pointSize: 9
-                        text: root.netIface + "  ·  " + root.netIP
+                        text: (root.netConn ? root.netConn + "  ·  " : "") + root.netIface + "  ·  " + root.netIP
                     }
                     ProcTable {
                         visible: root.hoverSeg === "net" && root.netApps.length > 0
@@ -378,9 +378,10 @@ PlasmoidItem {
                     if (ln === "---") { pastSep = true; continue }
                     if (!ln) continue
                     if (!pastSep) {
-                        var f = ln.split(" ")
+                        var f = ln.split("|")
                         netIface = f[0] || ""
                         netIP = f[1] || ""
+                        netConn = (f[2] || "").trim()
                     } else {
                         var m = ln.match(/^(\d+)\s+"(.+)"$/)
                         if (m && apps.length < 3) apps.push({name: m[2], v1: m[1] + " conn", v2: ""})
@@ -399,7 +400,7 @@ PlasmoidItem {
         else if (seg === "gpu")
             gpuTopSource.connectSource("bash " + claudeScriptPath.replace("fetch-usage.sh", "gpu-top.sh"))
         else if (seg === "net")
-            netInfoSource.connectSource("sh -c 'ip -o route get 1.1.1.1 2>/dev/null | sed -E \"s/.* dev ([^ ]+).* src ([^ ]+).*/\\1 \\2/\"; echo ---; ss -tnp state established 2>/dev/null | grep -oE \"\\\"[^\\\"]+\\\"\" | sort | uniq -c | sort -rn | head -3 | sed -E \"s/^ +//\"'")
+            netInfoSource.connectSource("sh -c 'r=$(ip -o route get 1.1.1.1 2>/dev/null); dev=$(echo \"$r\" | sed -E \"s/.* dev ([^ ]+).*/\\1/\"); src=$(echo \"$r\" | sed -E \"s/.* src ([^ ]+).*/\\1/\"); con=$(nmcli -t -f GENERAL.CONNECTION device show \"$dev\" 2>/dev/null | cut -d: -f2-); echo \"$dev|$src|$con\"; echo ---; ss -tnp state established 2>/dev/null | grep -oE \"\\\"[^\\\"]+\\\"\" | sort | uniq -c | sort -rn | head -3 | sed -E \"s/^ +//\"'")
         else if (seg === "disk")
             diskSource.connectSource("sh -c \"df -BG / --output=pcent,size,used | tail -1 | tr -d '%G'\"")
         else if (seg === "uptime")
@@ -561,6 +562,7 @@ PlasmoidItem {
     property var netApps: []      // [{name, v1: "N conns"}]
     property string netIface: ""
     property string netIP: ""
+    property string netConn: ""    // NetworkManager connection name (SSID for wifi)
     property real ramTotalGB: 0
     property real netUpBytes: 0
     property real prevNetTxBytes: 0
@@ -1085,8 +1087,29 @@ PlasmoidItem {
         return eta ? "At current pace — weekly hits 100% ~" + eta : ""
     }
 
+    // Attention = any window in the red band with live data; the mascot blinks
+    // (normal/red variant swap — RichText <img> can't animate any other way)
+    readonly property bool claudeAttention: {
+        if (claudeStale) return false
+        var s = claudeLimitByKind("session")
+        var w = claudeLimitByKind("weekly_all")
+        return (s && s.percent >= claudeCritThreshold) || (w && w.percent >= claudeCritThreshold)
+    }
+    readonly property bool codexAttention:
+        (codexSession !== null && !codexSessionStale() && (codexSession.used_percent || 0) >= claudeCritThreshold)
+        || (codexWeekly !== null && !codexOld && (codexWeekly.used_percent || 0) >= claudeCritThreshold)
+    property bool warnBlink: false
+    Timer {
+        interval: 700
+        repeat: true
+        running: root.claudeAttention || root.codexAttention
+        onTriggered: root.warnBlink = !root.warnBlink
+        onRunningChanged: if (!running) root.warnBlink = false
+    }
+
     function claudeIconHtml() {
-        return '<img src="' + Qt.resolvedUrl("../icons/claude-mascot.png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '"> '
+        var f = (claudeAttention && warnBlink) ? "claude-mascot-warn.png" : "claude-mascot.png"
+        return '<img src="' + Qt.resolvedUrl("../icons/" + f) + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '"> '
     }
 
     // At 100% the useful number is time-to-reset: force the countdown (even
@@ -1141,7 +1164,8 @@ PlasmoidItem {
     }
 
     function codexIconHtml() {
-        return '<img src="' + Qt.resolvedUrl("../icons/codex-mascot.png") + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '"> '
+        var f = (codexAttention && warnBlink) ? "codex-mascot-warn.png" : "codex-mascot.png"
+        return '<img src="' + Qt.resolvedUrl("../icons/" + f) + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '"> '
     }
 
     property bool checking: false
@@ -1248,8 +1272,13 @@ PlasmoidItem {
         if (seg !== undefined && useIcons) {
             // red-tinted variant when the metric is in warn state (only cpu/gpu/ram/disk have one)
             var warn = color === warnHex && ["cpu", "gpu", "ram", "disk"].indexOf(seg) >= 0 ? "-warn" : ""
-            var w = Math.round(root.panelIconPx * (metricIconAspect[seg] || 1))
-            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + warn + ".png") + '" width="' + w + '" height="' + root.panelIconPx + '">&nbsp;'
+            // wide icons (ram/gpu) render shorter so their footprint roughly
+            // matches the square icons instead of dwarfing them; 1.2 = slight
+            // area bonus so the shrunk height stays legible
+            var asp = metricIconAspect[seg] || 1
+            var h = asp > 1 ? Math.round(root.panelIconPx * Math.sqrt(1.2 / asp)) : root.panelIconPx
+            var w = Math.round(h * asp)
+            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + warn + ".png") + '" width="' + w + '" height="' + h + '">&nbsp;'
         }
         if (useIcons && faFont.status === FontLoader.Ready)
             return faIcon(iconUnicode, color)
@@ -1642,7 +1671,9 @@ PlasmoidItem {
     // ── Popup view ──────────────────────────────────────────────
     fullRepresentation: Item {
         implicitWidth: popupLayout.implicitWidth + 44
-        implicitHeight: popupLayout.implicitHeight + 44
+        // capped so a growing model list can't outrun the screen — content
+        // scrolls instead of getting clipped
+        implicitHeight: Math.min(popupLayout.implicitHeight + 44, 940)
         Layout.preferredWidth: implicitWidth
         Layout.preferredHeight: implicitHeight
 
@@ -1655,11 +1686,17 @@ PlasmoidItem {
             radius: 8
         }
 
+        Flickable {
+            anchors.fill: parent
+            anchors.margins: 22
+            contentWidth: popupLayout.implicitWidth
+            contentHeight: popupLayout.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+
         ColumnLayout {
             id: popupLayout
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: 22
             spacing: 12
 
             // ── System detail (only non-redundant info; panel already shows live metrics) ──
@@ -2001,6 +2038,7 @@ PlasmoidItem {
                     text: "Claude updated " + root.fmtAgo(root.claudeFetchedAt)
                 }
             }
+        }
         }
     }
 

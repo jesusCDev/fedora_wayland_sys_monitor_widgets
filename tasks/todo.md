@@ -25,12 +25,22 @@
   per row, then "+N more".
 
 ## Optional / parked (ask before doing)
-- [ ] Codex/Claude icon animation — requires restructuring AI segment from
-  RichText into separate Image elements (RichText `<img>` can't animate).
+- [x] Codex/Claude icon animation — done 2026-08-13 as attention-only blink:
+  mascots swap normal/red variant every 700ms while any window sits in the red
+  band (>= claudeCritThreshold, live data only). No RichText restructure needed.
+  Verified live via threshold-drop test, then restored to default 85.
 - [ ] Battery segment scroll-wheel = screen brightness (user skipped workspace
   scroll; confirm before adding any scroll gesture).
 - [ ] AI segment width reservation — "1h 3m" vs "58m" reflows once a minute.
-- [ ] Cap RAM icon aspect if 2.46x reads too wide at a glance.
+  (Explained to user 2026-08-13; awaiting go/no-go.)
+- [x] RAM icon size — done 2026-08-13: wide icons (ram/gpu) now render at
+  roughly equal visual area to the square ones (height scaled by
+  sqrt(1.2/aspect)); RAM no longer dwarfs the row.
+
+## New (2026-08-13 evening)
+- [x] Net hover shows connection name (SSID) via nmcli, before iface/IP.
+- [x] AI popup capped at 940px with Flickable + scrollbar — growing model
+  lists scroll instead of clipping.
 
 ## User-side (needs sudo / manual)
 - [ ] `sudo setsebool -P selinuxuser_execheap 1` (Android emulator fix)
