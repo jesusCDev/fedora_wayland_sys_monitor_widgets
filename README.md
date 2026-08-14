@@ -110,6 +110,10 @@ Toggle each metric on/off: CPU, GPU, RAM, Network, Disk, Uptime, Battery, Batter
 ### Colors
 Override color for any individual metric with text input or color picker. Leave empty for default.
 
+> **Note:** The default palette is tuned for a dark panel. On a light panel
+> theme the bright defaults (light blue/green/purple/orange) will have poor
+> contrast — override them per metric with darker colors in the settings.
+
 ## Installation
 
 ### From source (recommended for development)

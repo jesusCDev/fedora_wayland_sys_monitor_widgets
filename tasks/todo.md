@@ -18,9 +18,11 @@
   file incl. k10temp/zenpower, GPU temp file preferring thinkpad EC over
   amdgpu/nouveau/radeon, internal display via kscreen-doctor). Results in `hw*`
   properties, ThinkPad values as defaults. No cache — probe is milliseconds.
-- [ ] **Light-panel safety** — all colors assume a dark panel. Either a
-  theme-aware fallback palette or a README warning.
-- [ ] **Workspace tooltip cap** — "+N more" after ~4 apps per workspace row.
+- [x] **Light-panel safety** — done 2026-08-13: README note under Colors
+  section (defaults tuned for dark panel; override per metric on light themes).
+  Theme-aware fallback palette skipped — per-metric overrides already exist.
+- [x] **Workspace tooltip cap** — done 2026-08-13: tooltip shows first 4 apps
+  per row, then "+N more".
 
 ## Optional / parked (ask before doing)
 - [ ] Codex/Claude icon animation — requires restructuring AI segment from
