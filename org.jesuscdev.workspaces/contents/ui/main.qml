@@ -32,8 +32,10 @@ PlasmoidItem {
             if (i !== currentIndex && apps.length === 0) continue
             var col = i % gridColumns
             var nm = (colNames[col] || ("C" + (col + 1))).trim() + "·" + (Math.floor(i / gridColumns) + 1)
+            var shown = apps.slice(0, 4)
+            if (apps.length > 4) shown.push("+" + (apps.length - 4) + " more")
             lines.push((i === currentIndex ? "▸ " : "  ") + nm
-                + (apps.length ? " — " + apps.join(", ") : ""))
+                + (shown.length ? " — " + shown.join(", ") : ""))
         }
         return lines.join("\n")
     }
