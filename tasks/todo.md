@@ -31,8 +31,8 @@
   Verified live via threshold-drop test, then restored to default 85.
 - [ ] Battery segment scroll-wheel = screen brightness (user skipped workspace
   scroll; confirm before adding any scroll gesture).
-- [ ] AI segment width reservation — "1h 3m" vs "58m" reflows once a minute.
-  (Explained to user 2026-08-13; awaiting go/no-go.)
+- [x] ~~AI segment width reservation~~ — user passed 2026-08-13: countdown
+  width changes at most every ~10 minutes, not worth it.
 - [x] RAM icon size — done 2026-08-13: wide icons (ram/gpu) now render at
   roughly equal visual area to the square ones (height scaled by
   sqrt(1.2/aspect)); RAM no longer dwarfs the row.
@@ -43,11 +43,16 @@
   lists scroll instead of clipping.
 
 ## User-side (needs sudo / manual)
-- [ ] `sudo setsebool -P selinuxuser_execheap 1` (Android emulator fix)
-- [ ] Remove kmail/kontact suite (confirm package list first)
-- [ ] Delete 1.8G theme backup (path lost — locate first)
-- [ ] Move session files for `ccr` in widget folder:
-  `mv ~/.claude/projects/-home-jesuscdev-Programming/6e5a3aab-* ~/.claude/projects/-home-jesuscdev-Programming-fedora-wayland-sys-monitor-widgets/`
+- [x] ~~SELinux execheap bool~~ — user passed 2026-08-13 (no emulator need).
+- [x] ~~Remove kmail/kontact~~ — user passed 2026-08-13; verified no akonadi/
+  kmail processes running and no autostart entries, so they cost nothing idle.
+- [x] Delete 1.8G theme backup — done 2026-08-13: located
+  `~/.local/share/theme-backup-2026-08-02` (aurorae/color-schemes/desktoptheme/
+  icons/look-and-feel), confirmed with user, deleted.
+- [x] ccr session move — already done in an earlier session: `6e5a3aab-*` lives
+  in the widget project dir. The 3 sessions still under
+  `-home-jesuscdev-Programming/` have cwd `/home/jesuscdev/Programming` — they
+  belong to that project, left in place.
 
 ## Done (this round)
 - [x] One-shot usage alerts (100% / reset / red-threshold) + toggles
