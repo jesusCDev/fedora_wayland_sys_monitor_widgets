@@ -146,7 +146,7 @@
             <max>100</max>
         </entry>
         <entry name="ccusageEnabled" type="Bool">
-            <default>true</default>
+            <default>false</default>
         </entry>
         <entry name="showCodex" type="Bool">
             <default>true</default>

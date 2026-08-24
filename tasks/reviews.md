@@ -93,3 +93,7 @@ reviewer: three parallel opus audits (aggregated sampler + hw probe, panel polis
 ### Open
 None. User retested hover across all segments on the new plasmashell instance
 2026-08-23: working as expected, right-edge clipping included.
+
+## 2026-08-23 20:26 — Battery scroll brightness, net rate wall-clock fix, ccusage default off
+reviewer: gpt-5.6-terra · 4 files changed, 43 insertions(+), 11 deletions(-)
+- [x] no findings

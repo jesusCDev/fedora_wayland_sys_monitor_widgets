@@ -473,6 +473,12 @@ PlasmoidItem {
     property real prevNetRxBytes: 0
     property bool netFirstRun: true
     property bool netConnected: true
+    property double netPrevStampMs: 0
+
+    // Re-enabling a hidden metric must not compute a delta spanning the
+    // whole off period
+    onShowCpuChanged: if (showCpu) cpuFirstRun = true
+    onShowNetChanged: if (showNet) netFirstRun = true
 
     // Trend arrow tracking
     property real prevCpuDisplay: 0.0
@@ -1403,6 +1409,18 @@ PlasmoidItem {
             launchSource.connectSource("sh -c '" + cmd + " &'")
     }
 
+    // Battery scroll = screen brightness, via powerdevil's own shortcut
+    // action (OSD + clamping for free). Accumulate to one notch so a
+    // touchpad's stream of small deltas doesn't spawn a process per event.
+    property int batWheelAccum: 0
+    function batWheel(wheel) {
+        batWheelAccum += wheel.angleDelta.y
+        if (Math.abs(batWheelAccum) < 120) return
+        var dir = batWheelAccum > 0 ? "Increase" : "Decrease"
+        batWheelAccum = 0
+        launchApp("qdbus org.kde.kglobalaccel /component/org_kde_powerdevil invokeShortcut \"" + dir + " Screen Brightness\"")
+    }
+
     property string sysFocus: "cpu"
     property bool sysPopupEnabled: Plasmoid.configuration.sysPopupEnabled
 
@@ -1553,6 +1571,7 @@ PlasmoidItem {
                     hoverEnabled: true
                     onEntered: root.segHovered("bat", parent)
                     onExited: if (root.hoverSeg === "bat") root.hoverSeg = ""
+                    onWheel: function(wheel) { root.batWheel(wheel) }
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
                         else root.launchApp(root.clickCommand)
@@ -1710,6 +1729,7 @@ PlasmoidItem {
                     hoverEnabled: true
                     onEntered: root.segHovered("bat", parent)
                     onExited: if (root.hoverSeg === "bat") root.hoverSeg = ""
+                    onWheel: function(wheel) { root.batWheel(wheel) }
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
                         else root.launchApp(root.clickCommand)
@@ -2274,15 +2294,20 @@ PlasmoidItem {
         // must not flash the item to "OFF"
         var st = (parts[2] || "").trim()
         if (st === "0" || st === "1") netConnected = (st === "1")
+        var nowMs = Date.now()
         if (!netFirstRun) {
             var dr = totalRx - prevNetRxBytes
             var dt = totalTx - prevNetTxBytes
-            var secs = effectiveIntervalMs / 1000.0
+            // wall-clock elapsed, not nominal interval: a dropped tick makes
+            // the next delta span two intervals
+            var secs = (nowMs - netPrevStampMs) / 1000.0
+            if (secs < 0.1) secs = effectiveIntervalMs / 1000.0
             if (dr >= 0) netDownBytes = dr / secs
             if (dt >= 0) netUpBytes = dt / secs
         }
         prevNetRxBytes = totalRx
         prevNetTxBytes = totalTx
+        netPrevStampMs = nowMs
         netFirstRun = false
     }
 

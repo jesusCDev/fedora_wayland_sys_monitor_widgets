@@ -29,13 +29,12 @@
   2026-08-23 (first plasmashell instance to actually load the fix).
 - [x] **Right-edge clipping** — user confirmed no clipping 2026-08-23; Plasma's
   own Dialog clamping covers it. Revisit only if a better approach appears.
-- [ ] First tick after re-enabling a hidden metric is bogus: `netFirstRun` /
-  `cpuFirstRun` stay false across the off period, so the delta spans the whole
-  gap. Pre-existing, predates the aggregation refactor.
-- [ ] A sample still in flight when the tick timer fires is dropped, and the
-  next one covers two intervals but is divided by one. Unverified at runtime.
-- [ ] `claude-mascot@2x.png` is 26x26 (half the 52x52 base, misnamed) and
-  referenced by nothing — delete it.
+- [x] First tick after re-enabling a hidden metric is bogus — fixed 2026-08-23:
+  `onShowCpuChanged`/`onShowNetChanged` reset the firstRun flags on re-enable.
+- [x] Dropped-tick double-interval division — fixed 2026-08-23: NET rate now
+  divides by wall-clock elapsed (`netPrevStampMs`) instead of the nominal
+  interval. CPU needs nothing (dIdle/dTotal is self-normalizing).
+- [x] `claude-mascot@2x.png` deleted 2026-08-23.
 
 ## Optional / parked (ask before doing)
 - [x] Codex/Claude icon animation — done 2026-08-13 as attention-only blink:
@@ -46,13 +45,21 @@
   700ms attention blink: CPU/GPU/RAM/disk swap their normal/red PNGs above the
   warning threshold, and an unplugged low battery swaps its glyph color. Values
   remain solid red; a low battery already on AC remains solid red without blinking.
-- [ ] Battery segment scroll-wheel = screen brightness (user skipped workspace
-  scroll; confirm before adding any scroll gesture).
+- [x] Battery segment scroll-wheel = screen brightness — user approved and
+  done 2026-08-23: wheel on either battery segment invokes powerdevil's
+  Increase/Decrease Screen Brightness shortcut via qdbus (OSD + clamping for
+  free), with one-notch (120-delta) accumulation so touchpads don't spawn a
+  process per micro-event.
 - [x] ~~AI segment width reservation~~ — user passed 2026-08-13: countdown
   width changes at most every ~10 minutes, not worth it.
 - [x] RAM icon size — done 2026-08-13: wide icons (ram/gpu) now render at
   roughly equal visual area to the square ones (height scaled by
   sqrt(1.2/aspect)); RAM no longer dwarfs the row.
+
+## New (2026-08-23)
+- [x] `ccusageEnabled` default flipped to false — local spend (API-cost stats)
+  hidden by default; most users care about session utilization, not API spend.
+  Toggle already exists in Metrics config page.
 
 ## New (2026-08-13 evening)
 - [x] Net hover shows connection name (SSID) via nmcli, before iface/IP.
