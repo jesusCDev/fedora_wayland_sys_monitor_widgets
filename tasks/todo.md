@@ -24,11 +24,28 @@
 - [x] **Workspace tooltip cap** — done 2026-08-13: tooltip shows first 4 apps
   per row, then "+N more".
 
+## Open after the 2026-08-18 validation sweep
+- [x] **Hover tooltip retest** — user confirmed working across all segments
+  2026-08-23 (first plasmashell instance to actually load the fix).
+- [x] **Right-edge clipping** — user confirmed no clipping 2026-08-23; Plasma's
+  own Dialog clamping covers it. Revisit only if a better approach appears.
+- [ ] First tick after re-enabling a hidden metric is bogus: `netFirstRun` /
+  `cpuFirstRun` stay false across the off period, so the delta spans the whole
+  gap. Pre-existing, predates the aggregation refactor.
+- [ ] A sample still in flight when the tick timer fires is dropped, and the
+  next one covers two intervals but is divided by one. Unverified at runtime.
+- [ ] `claude-mascot@2x.png` is 26x26 (half the 52x52 base, misnamed) and
+  referenced by nothing — delete it.
+
 ## Optional / parked (ask before doing)
 - [x] Codex/Claude icon animation — done 2026-08-13 as attention-only blink:
   mascots swap normal/red variant every 700ms while any window sits in the red
   band (>= claudeCritThreshold, live data only). No RichText restructure needed.
   Verified live via threshold-drop test, then restored to default 85.
+- [x] System/battery icon animation — done 2026-08-16 using the same shared
+  700ms attention blink: CPU/GPU/RAM/disk swap their normal/red PNGs above the
+  warning threshold, and an unplugged low battery swaps its glyph color. Values
+  remain solid red; a low battery already on AC remains solid red without blinking.
 - [ ] Battery segment scroll-wheel = screen brightness (user skipped workspace
   scroll; confirm before adding any scroll gesture).
 - [x] ~~AI segment width reservation~~ — user passed 2026-08-13: countdown

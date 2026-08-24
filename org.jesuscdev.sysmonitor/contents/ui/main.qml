@@ -39,7 +39,7 @@ PlasmoidItem {
         flags: Qt.WindowDoesNotAcceptFocus | Qt.ToolTip
         location: Plasmoid.location
         visualParent: root.hoverAnchor
-        visible: root.hoverSeg !== "" && root.hoverAnchor !== null && !root.expanded
+        visible: root.hoverSeg !== "" && root.hoverAnchor !== null && !root.expanded && !root.tipRearming
 
         mainItem: Item {
             implicitWidth: ttFrame.implicitWidth
@@ -381,7 +381,9 @@ PlasmoidItem {
                         var f = ln.split("|")
                         netIface = f[0] || ""
                         netIP = f[1] || ""
-                        netConn = (f[2] || "").trim()
+                        netConn = f.slice(2).join("|").trim()
+                        // nmcli prints "--" for a device with no active profile
+                        if (netConn === "--") netConn = ""
                     } else {
                         var m = ln.match(/^(\d+)\s+"(.+)"$/)
                         if (m && apps.length < 3) apps.push({name: m[2], v1: m[1] + " conn", v2: ""})
@@ -392,9 +394,19 @@ PlasmoidItem {
         }
     }
 
+    // The dialog only positions itself on show; sliding between segments keeps
+    // it visible, so it would stay under the first segment. Blink it hidden for
+    // one event-loop tick whenever the anchor changes to force a reposition.
+    property bool tipRearming: false
+    Timer { id: tipRearmTimer; interval: 0; onTriggered: root.tipRearming = false }
+
     function segHovered(seg, item) {
         hoverSeg = seg
-        if (item !== undefined) hoverAnchor = item
+        if (item !== undefined && item !== hoverAnchor) {
+            hoverAnchor = item
+            tipRearming = true
+            tipRearmTimer.restart()
+        }
         if (seg === "cpu" || seg === "ram")
             refreshProcs()
         else if (seg === "gpu")
@@ -412,8 +424,9 @@ PlasmoidItem {
     // Font Awesome
     FontLoader { id: faFont; source: "../fonts/fa-solid-900.ttf" }
 
-    // Hardware names/paths, probed once at startup (defaults = this ThinkPad,
-    // used until the probe returns or if it finds nothing)
+    // Hardware names/paths, probed once at startup and used until the probe
+    // returns or if it finds nothing. Names default to this ThinkPad; the temp
+    // files default to /dev/null so a missing sensor reads 0 and stays hidden.
     property string hwBat: "BAT0"
     property string hwAc: "AC"
     property string hwBacklight: "intel_backlight"
@@ -844,18 +857,46 @@ PlasmoidItem {
     property string warnHex: warnColorOverride !== ""
         ? warnColorOverride : (brightColors ? warnHexBright : warnHexNormal)
 
+    // Warning state is kept separate from the resolved display colors so the
+    // icon blink does not depend on two configured colors being different.
+    readonly property bool cpuWarning: warnEnabled && cpuValue >= cpuWarnThreshold
+    readonly property bool gpuWarning: warnEnabled && gpuValue >= gpuWarnThreshold
+    readonly property bool ramWarning: warnEnabled && ramValue >= ramWarnThreshold
+    readonly property bool diskWarning: warnEnabled && diskValue >= 90
+    readonly property bool batteryWarning:
+        warnEnabled && batValue >= 0 && batValue <= batWarnThreshold
+    readonly property bool systemAttention: useIcons
+        && ((showCpu && cpuWarning) || (showGpu && gpuWarning)
+            || (showRam && ramWarning) || (showDisk && diskWarning))
+    // A low battery already connected to AC stays red but does not blink: it
+    // no longer needs the user's attention to connect power.
+    readonly property bool batteryAttention:
+        useIcons && showBat && batteryWarning && !batCharging
+
+    function metricWarning(seg) {
+        switch (seg) {
+        case "cpu": return cpuWarning
+        case "gpu": return gpuWarning
+        case "ram": return ramWarning
+        case "disk": return diskWarning
+        default: return false
+        }
+    }
+
+    property string batBaseHex: batColorOverride !== ""
+        ? batColorOverride : (brightColors ? batHexBright : batHexNormal)
+
     // Resolved colors (accounting for warnings, then overrides, then bright/normal)
-    property string cpuHex: (warnEnabled && cpuValue >= cpuWarnThreshold)
+    property string cpuHex: cpuWarning
         ? warnHex : (cpuColorOverride !== "" ? cpuColorOverride : (brightColors ? cpuHexBright : cpuHexNormal))
-    property string gpuHex: (warnEnabled && gpuValue >= gpuWarnThreshold)
+    property string gpuHex: gpuWarning
         ? warnHex : (gpuColorOverride !== "" ? gpuColorOverride : (brightColors ? gpuHexBright : gpuHexNormal))
-    property string ramHex: (warnEnabled && ramValue >= ramWarnThreshold)
+    property string ramHex: ramWarning
         ? warnHex : (ramColorOverride !== "" ? ramColorOverride : (brightColors ? ramHexBright : ramHexNormal))
-    property string batHex: (warnEnabled && batValue >= 0 && batValue <= batWarnThreshold)
-        ? warnHex : (batColorOverride !== "" ? batColorOverride : (brightColors ? batHexBright : batHexNormal))
+    property string batHex: batteryWarning ? warnHex : batBaseHex
     property string netHex: !netConnected
         ? warnHex : (netColorOverride !== "" ? netColorOverride : (brightColors ? netHexBright : netHexNormal))
-    property string diskHex: (warnEnabled && diskValue >= 90)
+    property string diskHex: diskWarning
         ? warnHex : (diskColorOverride !== "" ? diskColorOverride : (brightColors ? diskHexBright : diskHexNormal))
     property string uptimeHex: uptimeColorOverride !== ""
         ? uptimeColorOverride : (brightColors ? uptimeHexBright : uptimeHexNormal)
@@ -1087,8 +1128,9 @@ PlasmoidItem {
         return eta ? "At current pace — weekly hits 100% ~" + eta : ""
     }
 
-    // Attention = any window in the red band with live data; the mascot blinks
-    // (normal/red variant swap — RichText <img> can't animate any other way)
+    // Attention icons share one normal/warning blink phase. RichText <img>
+    // elements cannot animate directly, so raster icons swap variants while
+    // the battery's Font Awesome glyph swaps colors.
     readonly property bool claudeAttention: {
         if (claudeStale) return false
         var s = claudeLimitByKind("session")
@@ -1103,6 +1145,7 @@ PlasmoidItem {
         interval: 700
         repeat: true
         running: root.claudeAttention || root.codexAttention
+            || root.systemAttention || root.batteryAttention
         onTriggered: root.warnBlink = !root.warnBlink
         onRunningChanged: if (!running) root.warnBlink = false
     }
@@ -1265,13 +1308,14 @@ PlasmoidItem {
 
     // RAM/GPU icon files keep their native wide aspect (height 52, width 52*aspect)
     // and render wider than tall — rotating them vertical made them unreadable
-    readonly property var metricIconAspect: ({ram: 2.46, gpu: 1.49})
+    readonly property var metricIconAspect: ({ram: 2.4615, gpu: 1.5})
 
     function metricLabel(text, iconUnicode, color, seg) {
         // seg given = generated PNG icon exists for it; battery + net-disconnected stay font glyphs
         if (seg !== undefined && useIcons) {
-            // red-tinted variant when the metric is in warn state (only cpu/gpu/ram/disk have one)
-            var warn = color === warnHex && ["cpu", "gpu", "ram", "disk"].indexOf(seg) >= 0 ? "-warn" : ""
+            // cpu/gpu/ram/disk have matching red variants. Keep their values
+            // red continuously and blink only the icon, like the AI mascots.
+            var warn = metricWarning(seg) && warnBlink ? "-warn" : ""
             // wide icons (ram/gpu) render shorter so their footprint roughly
             // matches the square icons instead of dwarfing them; 1.2 = slight
             // area bonus so the shrunk height stays legible
@@ -1397,7 +1441,10 @@ PlasmoidItem {
                 bolt = ' <span style="color:#FFFFFF;">&#x26A1;</span>'
         }
         var batTimeStr = showBatTime && fmtBatTime() ? (' <span style="color:' + claudeDimHex + ';">' + fmtBatTime() + '</span>') : ''
-        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', batIconUnicode(), batHex) + fmtPct(batValue) + '</span>' + batTimeStr + '</b>' + bolt
+        var iconColor = batteryAttention
+            ? (warnBlink ? warnHex : batBaseHex)
+            : batHex
+        return '<b><span style="color:' + batHex + ';">' + metricLabel('BAT', batIconUnicode(), iconColor) + fmtPct(batValue) + '</span>' + batTimeStr + '</b>' + bolt
     }
 
     function batSepHtml() {
@@ -1460,7 +1507,9 @@ PlasmoidItem {
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onEntered: root.segHovered(mi.seg, mi)
-            onExited: root.hoverSeg = ""
+            // fast slides can deliver the next segment's enter before this exit;
+            // only clear if this segment still owns the tooltip
+            onExited: if (root.hoverSeg === mi.seg) root.hoverSeg = ""
             onClicked: function(mouse) {
                 if (mouse.button === Qt.LeftButton) root.metricClicked(mi.seg)
                 else root.launchApp(root.clickCommand)
@@ -1503,7 +1552,7 @@ PlasmoidItem {
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     onEntered: root.segHovered("bat", parent)
-                    onExited: root.hoverSeg = ""
+                    onExited: if (root.hoverSeg === "bat") root.hoverSeg = ""
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
                         else root.launchApp(root.clickCommand)
@@ -1592,7 +1641,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
                         onEntered: root.segHovered("ai", parent)
-                        onExited: root.hoverSeg = ""
+                        onExited: if (root.hoverSeg === "ai") root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.MiddleButton) root.launchApp("xdg-open https://claude.ai/settings/usage")
                             else root.togglePopup("claude")
@@ -1620,7 +1669,7 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
                         onEntered: root.segHovered("ai", parent)
-                        onExited: root.hoverSeg = ""
+                        onExited: if (root.hoverSeg === "ai") root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.MiddleButton) root.launchApp("xdg-open https://chatgpt.com/codex/settings/usage")
                             else root.togglePopup("claude")
@@ -1660,7 +1709,7 @@ PlasmoidItem {
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
                     onEntered: root.segHovered("bat", parent)
-                    onExited: root.hoverSeg = ""
+                    onExited: if (root.hoverSeg === "bat") root.hoverSeg = ""
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) root.metricClicked("bat")
                         else root.launchApp(root.clickCommand)
@@ -2070,6 +2119,8 @@ PlasmoidItem {
                 delete buffers[source]
                 disconnectSource(source)
                 parseHwProbe(output)
+                // first sample waits for the probe so it uses real paths
+                refreshAll()
             }
         }
     }
@@ -2077,7 +2128,7 @@ PlasmoidItem {
     function probeHardware() {
         hwProbeSource.connectSource("sh -c '" +
             "for b in /sys/class/power_supply/BAT* /sys/class/power_supply/CMB*; do [ -e \"$b/capacity\" ] && echo \"BAT ${b##*/}\" && break; done; " +
-            "for a in /sys/class/power_supply/*; do [ -e \"$a/online\" ] && echo \"AC ${a##*/}\" && break; done; " +
+            "for a in /sys/class/power_supply/*; do [ -e \"$a/online\" ] || continue; [ \"$(cat \"$a/type\" 2>/dev/null)\" = Mains ] || continue; echo \"AC ${a##*/}\"; break; done; " +
             "for l in /sys/class/backlight/*; do [ -e \"$l/brightness\" ] && echo \"BL ${l##*/}\" && break; done; " +
             "for k in /sys/class/leds/*kbd_backlight*; do [ -e \"$k/brightness\" ] && echo \"KBD ${k##*/}\" && break; done; " +
             "for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name 2>/dev/null); case $n in coretemp|k10temp|zenpower) echo \"CPUT $d/temp1_input\";; thinkpad) echo \"GPUT thinkpad $d/temp2_input\";; amdgpu|nouveau|radeon) echo \"GPUT $n $d/temp1_input\";; esac; done; " +
@@ -2688,8 +2739,7 @@ PlasmoidItem {
 
     Component.onCompleted: {
         loadUsageNotificationState()
-        probeHardware()
-        refreshAll()
+        probeHardware()   // calls refreshAll() when it returns
         refreshClaude()
         // startup sync: onBatChargingChanged won't fire if the first battery
         // sample matches the default (on battery), so run once here
