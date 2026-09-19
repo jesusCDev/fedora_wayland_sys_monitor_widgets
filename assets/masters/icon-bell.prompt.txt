@@ -1,0 +1,13 @@
+Generated 2026-09-01 via image-asset-gen skill (Codex gpt-image-2, --transparent, 2048x2048 request)
+
+Asset type: tiny panel icon for a desktop notification widget, one of an existing icon set (CPU chip, hard disk, download arrow, clock) drawn in the same style
+Subject: a simple classic bell — chunky rounded dome, flat wide rim, small round clapper peeking below the rim, tiny knob on top
+Style/medium: flat vector, chunky pixel-art-inspired, bold simple silhouette, high contrast, thick forms, two-tone shading only
+Composition: single centred subject occupying the middle 60% of the frame, generous empty margin all sides
+Colour palette: body #FFD54F golden yellow with #C9A227 shading, #6B5314 dark outline about 1/40 of the frame thick
+Constraints: no text, no watermark, no drop shadow, no background scenery, no thin lines (must stay readable at 16 pixels)
+Avoid: gradients heavier than two tones, motion or ringing lines, sparkles, badges, outlines thinner than 1/40 of frame
+
+Derived: org.jesuscdev.notify/contents/icons/bell.png (52px) from the bbox-cropped,
+square-padded master via Pillow LANCZOS; bell-dim.png / bell-warn.png are local
+PIL HSV recolours (grey / #EF5350 red), no extra generation.

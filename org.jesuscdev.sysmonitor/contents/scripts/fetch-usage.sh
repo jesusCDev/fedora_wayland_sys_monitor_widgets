@@ -205,6 +205,28 @@ fail() { # $1 = error name
 TOKEN=$(jq -r '.claudeAiOauth.accessToken // empty' "$CREDS" 2>/dev/null)
 [[ -n "$TOKEN" ]] || fail "no-credentials"
 
+# Serve a fresh-enough cache without a network hit: two widget instances each
+# poll every 60s, and the endpoint 429s under that plus manual checks.
+# "force" (the Check now button) bypasses.
+THROTTLE=45
+[[ "${1:-}" == "force" ]] && THROTTLE=0
+# One run at a time: both instances tick in the same second after a
+# plasmashell start, so without this they would both miss the cache and fetch.
+# The waiter then finds the cache the winner just wrote.
+exec 9>"$CACHE.lock"; flock 9
+if [[ -s "$CACHE" ]] && (( $(date +%s) - $(stat -c %Y "$CACHE" 2>/dev/null || echo 0) < THROTTLE )); then
+    if USAGE=$(jq -c . "$CACHE" 2>/dev/null); then
+        ACCESS=$(fable_access_from_state) || ACCESS='{"exhausted":false}'
+        jq -n --argjson usage "$USAGE" \
+            --argjson fable_access "$ACCESS" \
+            --argjson ft "$(stat -c %Y "$CACHE")" \
+            --arg plan "$(jq -r '.claudeAiOauth.subscriptionType // ""' "$CREDS" 2>/dev/null)" \
+            --arg tier "$(jq -r '.claudeAiOauth.rateLimitTier // ""' "$CREDS" 2>/dev/null)" \
+            '{ok:true, fetched_at:$ft, plan:$plan, tier:$tier,
+                fable_access:$fable_access, usage:$usage}' 2>/dev/null && exit 0
+    fi
+fi
+
 # ponytail: beta header speculative — endpoint works without it; drop if it ever 4xxes
 RESP=$(curl -sS --max-time 10 -w $'\n%{http_code}' \
     -H @- https://api.anthropic.com/api/oauth/usage <<EOF

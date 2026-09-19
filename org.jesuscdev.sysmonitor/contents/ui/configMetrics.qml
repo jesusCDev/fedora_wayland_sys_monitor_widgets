@@ -23,6 +23,8 @@ ScrollView {
     property alias cfg_ccusageEnabled: ccusageCheck.checked
     property alias cfg_showCodex: codexCheck.checked
     property alias cfg_aiResetCountdown: aiResetCheck.checked
+    property alias cfg_fablePanelPct: fablePctCheck.checked
+    property alias cfg_codexSparkEnabled: codexSparkCheck.checked
     property alias cfg_notifyEnabled: notifyCheck.checked
     property alias cfg_aiPreWarnEnabled: preWarnCheck.checked
     property alias cfg_showCostPanel: costPanelCheck.checked
@@ -145,6 +147,18 @@ ScrollView {
             id: aiResetCheck
             Kirigami.FormData.label: "Reset display:"
             text: "Show time left until reset instead of 5h/7d labels"
+        }
+
+        CheckBox {
+            id: fablePctCheck
+            Kirigami.FormData.label: "Fable meter:"
+            text: "Weekly slot shows Fable % while it lasts, reset countdown at 100%"
+        }
+
+        CheckBox {
+            id: codexSparkCheck
+            Kirigami.FormData.label: "Codex sparkline:"
+            text: "Show Codex 24h usage sparkline in the hover"
         }
 
         CheckBox {

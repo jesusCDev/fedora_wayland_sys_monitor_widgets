@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [{"Name": "jesuscdev"}],
+        "Category": "Hardware",
+        "Description": "Bluetooth adapter and device status with quick connect and pair from the panel",
+        "Icon": "network-bluetooth",
+        "Id": "org.jesuscdev.bluetooth",
+        "Name": "Bluetooth Inline",
+        "Version": "1.0.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

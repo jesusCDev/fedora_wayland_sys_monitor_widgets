@@ -81,6 +81,7 @@ PlasmoidItem {
                             case "cpu": return "CPU " + root.fmt(root.cpuValue) + "%"
                             case "gpu": return "GPU " + root.fmt(root.gpuValue) + "%"
                             case "ram": return "RAM " + root.ramUsedGB.toFixed(1) + "G / " + root.ramTotalGB.toFixed(1) + "G  (" + Math.round(root.ramValue) + "%)"
+                                + "   swap " + root.swapUsedGB.toFixed(1) + "G   pressure " + Math.round(root.memPressure) + "%"
                             case "net": return root.netConnected
                                 ? "Net  ↓ " + root.fmtNetSpeed(root.netDownBytes) + "   ↑ " + root.fmtNetSpeed(root.netUpBytes)
                                 : "Network — disconnected"
@@ -226,11 +227,18 @@ PlasmoidItem {
                     }
 
                     // NET: interface + per-app connections
+                    // The network you're on is the headline: bold in NET's colour,
+                    // interface + IP stay dim. SSIDs are untrusted text — escaped.
                     Text {
                         visible: root.hoverSeg === "net" && root.netIface !== ""
-                        color: root.claudeDimHex
+                        textFormat: Text.RichText
                         font.pointSize: 9
-                        text: (root.netConn ? root.netConn + "  ·  " : "") + root.netIface + "  ·  " + root.netIP
+                        text: {
+                            var name = root.netConn || root.netIface
+                            var rest = (root.netConn ? root.netIface + "  ·  " : "") + root.netIP
+                            return '<b><span style="color:' + root.netHex + ';">' + root.escapeHtml(name) + '</span></b>'
+                                + '<span style="color:' + root.claudeDimHex + ';">  ·  ' + root.escapeHtml(rest) + '</span>'
+                        }
                     }
                     ProcTable {
                         visible: root.hoverSeg === "net" && root.netApps.length > 0
@@ -279,57 +287,251 @@ PlasmoidItem {
                         text: "Booted " + Qt.formatDateTime(new Date(Date.now() - root.uptimeSecs * 1000), "ddd MMM d, h:mm AP")
                     }
 
-                    // AI summary
-                    GridLayout {
-                        visible: root.hoverSeg === "ai"
-                        columns: 2
-                        columnSpacing: 18
-                        rowSpacing: 5
-                        Text { visible: root.showClaude; color: root.claudeIconHex; font.pointSize: 10; font.bold: true; text: "Claude" }
-                        Text {
-                            visible: root.showClaude
-                            color: "#FFFFFF"; font.pointSize: 10
-                            text: {
-                                var se = root.claudeLimitByKind("session"), w = root.claudeLimitByKind("weekly_all")
-                                return (se ? "5h " + Math.round(se.percent) + "%" : "") + (se && w ? "   ·   " : "") + (w ? "7d " + Math.round(w.percent) + "%" : "")
+                    // ── Claude usage section ──
+                    Text {
+                        visible: root.hoverSeg === "ai" && root.showClaude
+                        textFormat: Text.RichText
+                        text: root.claudeIconHtml()
+                            + ' <b style="font-size:13pt; color:' + root.claudeIconHex + ';">Claude</b>'
+                            + (root.claudePlan ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">' + root.claudePlan
+                                + (root.claudeTier ? ' (' + root.claudeTier + ')' : '') + '</span>' : '')
+                    }
+                    Text {
+                        visible: root.hoverSeg === "ai" && root.showClaude && root.claudeStale
+                        textFormat: Text.RichText
+                        text: '<span style="color:' + root.claudeWarnHex + ';">&#x26A0; cached data — ' + root.claudeError + '</span>'
+                    }
+                    Rectangle {
+                        id: fableAlertBanner
+                        property var limit: root.fableLimit()
+                        property string alertState: root.fableAlertState(fableAlertBanner.limit)
+                        property bool reportedOut: root.fableAccessActive()
+                        property bool dimmed: root.claudeStale && !fableAlertBanner.reportedOut
+                        visible: root.hoverSeg === "ai" && root.showClaude && fableAlertBanner.alertState !== ""
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 480
+                        implicitHeight: fableAlertColumn.implicitHeight + 20
+                        radius: 6
+                        color: fableAlertBanner.reportedOut ? "#30EF5350"
+                            : (fableAlertBanner.dimmed ? "#168A8A8A"
+                                : (fableAlertBanner.alertState === "exhausted" ? "#30EF5350" : "#26FF9E45"))
+                        border.width: 1
+                        border.color: fableAlertBanner.reportedOut ? root.claudeCritHex
+                            : (fableAlertBanner.dimmed ? root.claudeDimHex
+                                : (fableAlertBanner.alertState === "exhausted"
+                                    ? root.claudeCritHex : root.claudeWarnHex))
+
+                        Column {
+                            id: fableAlertColumn
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.margins: 10
+                            spacing: 3
+
+                            Text {
+                                width: parent.width
+                                color: fableAlertBanner.reportedOut ? root.claudeCritHex
+                                    : (fableAlertBanner.dimmed ? root.claudeDimHex
+                                    : (fableAlertBanner.alertState === "exhausted"
+                                        ? root.claudeCritHex : root.claudeWarnHex)
+                                    )
+                                font.pointSize: 11
+                                font.bold: true
+                                text: fableAlertBanner.reportedOut
+                                    ? "⚠ Fable 5 included access is out until the weekly reset"
+                                    : (fableAlertBanner.alertState === "exhausted"
+                                        ? "⚠ Fable 5 included limit reached" + (fableAlertBanner.dimmed ? " (cached)" : "")
+                                        : "⚠ Fable 5 included usage is low" + (fableAlertBanner.dimmed ? " (cached)" : ""))
                             }
-                        }
-                        Text {
-                            visible: root.showClaude && root.fableAlertState(root.fableLimit()) !== ""
-                            color: root.fableAccessActive() ? root.claudeCritHex
-                                : (root.claudeStale ? root.claudeDimHex
-                                    : (root.fableAlertState(root.fableLimit()) === "exhausted"
-                                        ? root.claudeCritHex : root.claudeWarnHex))
-                            font.pointSize: 10
-                            font.bold: true
-                            text: "Fable 5"
-                        }
-                        Text {
-                            visible: root.showClaude && root.fableAlertState(root.fableLimit()) !== ""
-                            color: root.fableAccessActive() ? root.claudeCritHex
-                                : (root.claudeStale ? root.claudeDimHex
-                                    : (root.fableAlertState(root.fableLimit()) === "exhausted"
-                                        ? root.claudeCritHex : root.claudeWarnHex))
-                            font.pointSize: 10
-                            font.bold: true
-                            text: root.fableHoverText(root.fableLimit())
-                        }
-                        Text { visible: root.showCodex && root.codexWeekly !== null; color: root.codexIconHex; font.pointSize: 10; font.bold: true; text: "Codex" }
-                        Text {
-                            visible: root.showCodex && root.codexWeekly !== null
-                            color: "#FFFFFF"; font.pointSize: 10
-                            text: root.codexWeekly ? "7d " + Math.round(root.codexWeekly.used_percent || 0) + "%" : ""
-                        }
-                        Text { visible: root.ccusageEnabled && root.ccToday() !== null; color: "#B0BEC5"; font.pointSize: 10; font.bold: true; text: "Today" }
-                        Text {
-                            visible: root.ccusageEnabled && root.ccToday() !== null
-                            color: "#FFFFFF"; font.pointSize: 10
-                            text: {
-                                var t = root.ccToday()
-                                return t ? "$" + (t.totalCost || 0).toFixed(2) + "   ·   " + root.fmtTokens(t.totalTokens || 0) + " tokens" : ""
+                            Text {
+                                width: parent.width
+                                color: fableAlertBanner.dimmed ? root.claudeDimHex : "#FFFFFF"
+                                font.pointSize: 10
+                                wrapMode: Text.WordWrap
+                                text: root.fableAlertDetail(fableAlertBanner.limit)
                             }
                         }
                     }
+                    Repeater {
+                        model: root.hoverSeg === "ai" && root.showClaude ? root.claudeLimits : []
+                        LimitRow {
+                            label: root.claudeLimitLabel(modelData)
+                            sub: root.isFableLimit(modelData) ? "50% of weekly plan usage" : ""
+                            pct: modelData.percent
+                            barColor: root.claudeLimitColor(modelData)
+                            // Fable's reset coincides with the weekly row's — skip it
+                            resetTxt: root.isFableLimit(modelData) ? "" : root.claudeFmtReset(modelData.resets_at)
+                            resetAtTxt: root.isFableLimit(modelData) ? "" : root.claudeFmtResetAt(modelData.resets_at)
+                            resetColor: root.claudeResetHex
+                        }
+                    }
+                    RowLayout {
+                        visible: root.hoverSeg === "ai" && root.showClaude && root.claudeHist.length > 1
+                        spacing: 10
+                        Canvas {
+                            id: claudeSpark
+                            Layout.preferredWidth: 240
+                            Layout.preferredHeight: 30
+                            width: 240; height: 30
+                            property var pts: root.claudeHist
+                            onPtsChanged: requestPaint()
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.strokeStyle = "#33888888"
+                                ctx.lineWidth = 1
+                                ctx.beginPath(); ctx.moveTo(0, height - 1); ctx.lineTo(width, height - 1); ctx.stroke()
+                                var now = Date.now() / 1000, from = now - 86400
+                                ctx.strokeStyle = root.claudeOkHex
+                                ctx.lineWidth = 1.5
+                                ctx.beginPath()
+                                var started = false
+                                for (var i = 0; i < pts.length; i++) {
+                                    if (pts[i].t < from) continue
+                                    var x = (pts[i].t - from) / 86400 * width
+                                    var y = height - 2 - (pts[i].p / 100) * (height - 4)
+                                    if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
+                                }
+                                ctx.stroke()
+                            }
+                        }
+                        Text { color: root.claudeDimHex; font.pointSize: 8; text: "5h window, last 24h" }
+                    }
+                    // ── Codex section ──
+                    Rectangle {
+                        visible: root.hoverSeg === "ai" && root.showCodex
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        height: 1
+                        color: "#33888888"
+                    }
+                    Text {
+                        visible: root.hoverSeg === "ai" && root.showCodex
+                        textFormat: Text.RichText
+                        text: root.codexIconHtml()
+                            + ' <b style="font-size:13pt; color:' + root.codexIconHex + ';">Codex</b>'
+                            + (root.codexPlan ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">' + root.codexPlan + '</span>' : '')
+                            + (root.codexFetchedAt ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">updated ' + root.codexAge() + '</span>' : '')
+                    }
+                    Text {
+                        visible: root.hoverSeg === "ai" && root.showCodex && !root.codexWeekly && !root.codexSession
+                        color: root.claudeDimHex
+                        text: "No codex data"
+                    }
+                    Repeater {
+                        model: root.hoverSeg === "ai" && root.showCodex ? root.codexRowsList() : []
+                        LimitRow {
+                            label: modelData.label
+                            pct: modelData.pct
+                            barColor: modelData.stale ? root.claudeDimHex : root.codexPctColor(modelData.pct)
+                            resetTxt: root.fmtEpochReset(modelData.resets_at)
+                            resetAtTxt: root.fmtEpochResetAt(modelData.resets_at)
+                            resetColor: root.codexResetHex
+                        }
+                    }
+                    Text {
+                        visible: root.hoverSeg === "ai" && root.showCodex && root.codexPaceLine() !== ""
+                        color: root.claudeWarnHex
+                        font.pointSize: 9
+                        text: root.codexPaceLine()
+                    }
+                    RowLayout {
+                        visible: root.hoverSeg === "ai" && root.showCodex && root.codexSparkEnabled && root.codexHist.length > 1
+                        spacing: 10
+                        Canvas {
+                            Layout.preferredWidth: 240
+                            Layout.preferredHeight: 30
+                            width: 240; height: 30
+                            property var pts: root.codexHist
+                            onPtsChanged: requestPaint()
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.strokeStyle = "#33888888"
+                                ctx.lineWidth = 1
+                                ctx.beginPath(); ctx.moveTo(0, height - 1); ctx.lineTo(width, height - 1); ctx.stroke()
+                                var now = Date.now() / 1000, from = now - 86400
+                                ctx.strokeStyle = root.codexOkHex
+                                ctx.lineWidth = 1.5
+                                ctx.beginPath()
+                                var started = false
+                                for (var i = 0; i < pts.length; i++) {
+                                    if (pts[i].t < from) continue
+                                    var x = (pts[i].t - from) / 86400 * width
+                                    var y = height - 2 - (pts[i].p / 100) * (height - 4)
+                                    if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
+                                }
+                                ctx.stroke()
+                            }
+                        }
+                        Text { color: root.claudeDimHex; font.pointSize: 8; text: "7d window, last 24h" }
+                    }
+
+                    // ── Local spend (Claude Code logs — includes any routed models) ──
+                    Rectangle {
+                        visible: root.hoverSeg === "ai" && root.ccusageEnabled
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        Layout.bottomMargin: 4
+                        height: 1
+                        color: "#33888888"
+                    }
+                    Text {
+                        visible: root.hoverSeg === "ai" && root.ccusageEnabled
+                        textFormat: Text.RichText
+                        text: '<b style="font-size:13pt; color:#B0BEC5;">Local spend</b>'
+                            + '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">this machine, all models in Claude Code logs</span>'
+                    }
+                    Text {
+                        visible: root.hoverSeg === "ai" && root.ccusageEnabled && root.ccToday() === null
+                        color: root.claudeDimHex
+                        text: root.ccRunning ? "Loading local stats…" : "No local stats"
+                    }
+                    GridLayout {
+                        visible: root.hoverSeg === "ai" && root.ccusageEnabled && root.ccToday() !== null
+                        columns: 2
+                        columnSpacing: 26
+                        rowSpacing: 3
+                        Text { text: "Today"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
+                        Text {
+                            color: "#FFFFFF"; font.pointSize: 10
+                            text: {
+                                var t = root.ccToday()
+                                return t ? "$" + (t.totalCost || 0).toFixed(2) + "  ·  " + root.fmtTokens(t.totalTokens || 0) + " tokens" : ""
+                            }
+                        }
+                        Text { text: "Last 7 days"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
+                        Text {
+                            color: "#FFFFFF"; font.pointSize: 10
+                            text: {
+                                var r = root.ccRange(7)
+                                return "$" + r.cost.toFixed(2) + "  ·  " + root.fmtTokens(r.tokens) + " tokens"
+                            }
+                        }
+                        Text { text: "Last 30 days"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
+                        Text {
+                            color: "#FFFFFF"; font.pointSize: 10
+                            text: {
+                                var r = root.ccRange(30)
+                                return "$" + r.cost.toFixed(2) + "  ·  " + root.fmtTokens(r.tokens) + " tokens"
+                            }
+                        }
+                    }
+                    ColumnLayout {
+                        visible: root.hoverSeg === "ai" && root.ccusageEnabled && root.ccToday() !== null
+                        spacing: 1
+                        Repeater {
+                            model: root.ccToday() ? (root.ccToday().modelBreakdowns || []) : []
+                            Text {
+                                color: root.claudeDimHex
+                                font.pointSize: 9
+                                text: "    " + modelData.modelName + ": $" + (modelData.cost || 0).toFixed(2)
+                            }
+                        }
+                    }
+
                 }
             }
         }
@@ -400,7 +602,20 @@ PlasmoidItem {
     property bool tipRearming: false
     Timer { id: tipRearmTimer; interval: 0; onTriggered: root.tipRearming = false }
 
+    // Chrome's tab strip sits right under the panel and overshooting a tab by a
+    // few px used to pop the tooltip. Hover only counts in the top hoverLiveFrac
+    // of the panel (mirrored on a bottom panel); the pointer has to travel past
+    // the desktop-facing band. Panel text spans ~22-78% of the panel height, so
+    // 0.75 would cut ~1px — 0.6 leaves the lower third of the text dead.
+    readonly property real hoverLiveFrac: 0.6
+    function segHoverAt(frac, seg, item) {
+        var live = Plasmoid.location === PlasmaCore.Types.BottomEdge
+            ? frac > 1 - hoverLiveFrac : frac < hoverLiveFrac
+        if (live) segHovered(seg, item)
+    }
+
     function segHovered(seg, item) {
+        if (seg === hoverSeg && item === hoverAnchor) return  // positionChanged repeats
         hoverSeg = seg
         if (item !== undefined && item !== hoverAnchor) {
             hoverAnchor = item
@@ -440,6 +655,11 @@ PlasmoidItem {
     property real gpuValue: 0.0
     property real ramValue: 0.0
     property real ramUsedGB: 0.0
+    property real swapUsedGB: 0.0
+    // /proc/pressure/memory "some avg10": % of the last 10s a task stalled on
+    // memory. Climbs well before used% does during a swap thrash.
+    property real memPressure: 0.0
+    readonly property int memPressureWarn: 10
     property real batValue: -1.0    // -1 = no battery detected
     property bool batCharging: false
     // Display state shown in the battery hover (fetched on hover open)
@@ -538,6 +758,11 @@ PlasmoidItem {
     // covers other machines); optional 5h window from local session logs
     property bool showCodex: Plasmoid.configuration.showCodex
     property bool aiResetCountdown: Plasmoid.configuration.aiResetCountdown
+    // `!== false` keeps the default ON even while a live instance's cached
+    // config schema predates the key (undefined until the widget is re-added)
+    property bool fablePanelPct: Plasmoid.configuration.fablePanelPct !== false
+    // `=== true`: default OFF, undefined (stale schema) stays hidden
+    property bool codexSparkEnabled: Plasmoid.configuration.codexSparkEnabled === true
 
     // ── Panel font scaling: track panel thickness, ~10pt at the default 40px ──
     property real panelHeight: 0
@@ -581,6 +806,9 @@ PlasmoidItem {
     property var netApps: []      // [{name, v1: "N conns"}]
     property string netIface: ""
     property string netIP: ""
+    function escapeHtml(t) {
+        return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    }
     property string netConn: ""    // NetworkManager connection name (SSID for wifi)
     property real ramTotalGB: 0
     property real netUpBytes: 0
@@ -789,12 +1017,37 @@ PlasmoidItem {
     component LimitRow: RowLayout {
         id: lr
         property string label
+        property string sub: ""
         property real pct: 0
         property string barColor: "#FFFFFF"
         property string resetTxt
+        property string resetAtTxt: ""
         property string resetColor: "#90CAF9"
         spacing: 10
-        Text { text: lr.label; color: "#FFFFFF"; font.pointSize: 11; Layout.preferredWidth: 200; elide: Text.ElideRight }
+        // Fixed-width Item, not a nested ColumnLayout: a nested layout ignores
+        // Layout.preferredWidth and reports its own implicit width, so a row
+        // with a sub-line grew its label cell and threw the bars off-column
+        Item {
+            Layout.preferredWidth: 200
+            Layout.minimumWidth: 200
+            Layout.maximumWidth: 200
+            implicitHeight: labelCol.implicitHeight
+            Column {
+                id: labelCol
+                width: 200
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 0
+                Text { width: 200; text: lr.label; color: "#FFFFFF"; font.pointSize: 11; elide: Text.ElideRight }
+                Text {
+                    visible: lr.sub !== ""
+                    width: 200
+                    text: lr.sub
+                    color: "#8A8A8A"
+                    font.pointSize: 8
+                    elide: Text.ElideRight
+                }
+            }
+        }
         Item {
             Layout.preferredWidth: 110
             Layout.preferredHeight: 8
@@ -807,7 +1060,19 @@ PlasmoidItem {
             }
         }
         Text { text: Math.round(lr.pct) + "%"; color: lr.barColor; font.bold: true; font.pointSize: 11; Layout.preferredWidth: 42; horizontalAlignment: Text.AlignRight }
-        Text { text: "\u21BB " + lr.resetTxt; color: lr.resetColor; font.pointSize: 10 }
+        // fixed cell so variable countdowns (42m / 16h 4m / 6d 23h) don't
+        // shift the absolute-time column that follows
+        Text {
+            visible: lr.resetTxt !== ""
+            text: "\u21BB " + lr.resetTxt
+            color: lr.resetColor
+            font.pointSize: 10
+            Layout.preferredWidth: 88
+            Layout.minimumWidth: 88
+            Layout.maximumWidth: 88
+        }
+        // absolute wall-clock reset \u2014 related info, sibling hue
+        Text { visible: lr.resetAtTxt !== ""; text: lr.resetAtTxt; color: "#B0BEC5"; font.pointSize: 10 }
     }
 
     component ProcTable: GridLayout {
@@ -867,7 +1132,8 @@ PlasmoidItem {
     // icon blink does not depend on two configured colors being different.
     readonly property bool cpuWarning: warnEnabled && cpuValue >= cpuWarnThreshold
     readonly property bool gpuWarning: warnEnabled && gpuValue >= gpuWarnThreshold
-    readonly property bool ramWarning: warnEnabled && ramValue >= ramWarnThreshold
+    readonly property bool ramWarning: warnEnabled
+        && (ramValue >= ramWarnThreshold || memPressure >= memPressureWarn)
     readonly property bool diskWarning: warnEnabled && diskValue >= 90
     readonly property bool batteryWarning:
         warnEnabled && batValue >= 0 && batValue <= batWarnThreshold
@@ -934,7 +1200,7 @@ PlasmoidItem {
         if (l.kind === "weekly_scoped") {
             var modelName = (l.scope && l.scope.model && l.scope.model.display_name) || "model"
             if (String(modelName).toLowerCase().indexOf("fable") >= 0)
-                return "Fable 5 included (50% cap)"
+                return "Fable 5 included"
             return "Weekly " + modelName
         }
         return l.kind
@@ -992,9 +1258,9 @@ PlasmoidItem {
                 || severity === "reached" || severity === "exceeded"
                 || severity === "exhausted" || severity === "blocked")
             return "exhausted"
-        if (severity === "warning" || severity === "critical" || severity === "danger"
-                || (!isNaN(pct) && pct >= claudeCritThreshold))
-            return "warning"
+        // No "warning" tier: the API flags severity=warning from ~80% and the
+        // user already knows the 50%-of-weekly Fable cap — only an actual
+        // exhaustion is actionable enough to surface.
         return ""
     }
 
@@ -1033,8 +1299,8 @@ PlasmoidItem {
         }
         if (!l) return ""
         var pct = fablePercent(l)
-        return isNaN(pct) ? "API METER · LOW"
-            : "API meter " + Math.round(pct) + "% · LOW"
+        // no reset here: it coincides with the weekly reset shown one row up
+        return isNaN(pct) ? "" : Math.round(pct) + "%"
     }
 
     function fableAlertDetail(l, staleOverride) {
@@ -1068,6 +1334,18 @@ PlasmoidItem {
         if (claudePaidUsageEnabled === false)
             return " Switch models until then, or enable paid usage credits."
         return " Switch models until then unless paid usage credits are enabled."
+    }
+
+    function fmtEpochResetAt(epoch) {
+        return epoch ? claudeFmtResetAt(new Date(Number(epoch) * 1000).toISOString()) : ""
+    }
+
+    function claudeFmtResetAt(iso) {
+        var tick = aiTick
+        if (!iso) return ""
+        var d = new Date(iso)
+        if (isNaN(d.getTime())) return ""
+        return Qt.formatDateTime(d, d.getTime() - Date.now() < 86400000 ? "h:mm AP" : "ddd h:mm AP")
     }
 
     function claudeFmtReset(iso) {
@@ -1181,8 +1459,30 @@ PlasmoidItem {
         var s = claudeLimitByKind("session")
         var w = claudeLimitByKind("weekly_all")
         var parts = []
-        if (s) parts.push(aiWindowHtml("5h", claudeFmtReset(s.resets_at), s.percent, claudePctColor(s.percent), claudeResetHex, claudeStale))
-        if (w) parts.push(aiWindowHtml("7d", claudeFmtReset(w.resets_at), w.percent, claudePctColor(w.percent), claudeResetHex, claudeStale))
+        // While Fable allowance remains, its % is the binding constraint — the
+        // weekly slot shows it instead of the weekly reset; at 100% (or an
+        // actual denial) the weekly reset display takes the slot back.
+        // Violet mascot marks it as the Fable meter; no "7d" label — the
+        // weekly window can be nearly over while the meter still has room.
+        var f = fablePanelPct ? fableLimit() : null
+        var fp = f ? fablePercent(f) : NaN
+        var fableLeft = f && !isNaN(fp) && fp < 100 && !fableAccessActive()
+        // Fable spent: the 5h session no longer gates frontier-model work, so
+        // the weekly reset is the only number worth panel space
+        var fableSpent = fablePanelPct && !fableLeft && (fableAccessActive() || (f && !isNaN(fp) && fp >= 100))
+        if (s && !fableSpent) parts.push(aiWindowHtml("5h", claudeFmtReset(s.resets_at), s.percent, claudePctColor(s.percent), claudeResetHex, claudeStale))
+        if (w) {
+            if (fableLeft) {
+                var fcd = claudeFmtReset(fableEffectiveReset(f))
+                parts.push('<img src="' + Qt.resolvedUrl("../icons/fable-mascot.png")
+                    + '" width="' + panelIconPx + '" height="' + panelIconPx + '"> '
+                    + (aiResetCountdown && fcd && fcd !== "now"
+                        ? '<span style="color:' + claudeResetHex + ';">' + fcd + ' </span>' : '')
+                    + '<span style="color:' + claudePctColor(fp) + ';">' + fmtPct(fp) + '</span>')
+            } else {
+                parts.push(aiWindowHtml("7d", claudeFmtReset(w.resets_at), w.percent, claudePctColor(w.percent), claudeResetHex, claudeStale))
+            }
+        }
         var body = parts.length ? parts.join('<span style="color:' + claudeDimHex + ';">&#183; </span>')
                                 : '<span style="color:' + claudeDimHex + ';">…</span>'
         return '<b>' + claudeIconHtml() + body + '</b>'
@@ -1218,10 +1518,15 @@ PlasmoidItem {
     }
 
     property bool checking: false
+    // Both fetches usually finish well under a second, so `checking` alone is
+    // an invisible flicker; the hold keeps the button visibly disabled and
+    // spaces out manual hits on a rate-limited endpoint.
+    Timer { id: checkHoldTimer; interval: 5000 }
 
     function forceCheck() {
         checking = true
-        claudeSource.connectSource("bash " + claudeScriptPath)
+        checkHoldTimer.restart()
+        claudeSource.connectSource("bash " + claudeScriptPath + " force")
         if (showCodex)
             codexSource.connectSource("bash " + claudeScriptPath.replace("fetch-usage.sh", "fetch-codex.sh") + " force")
         if (ccusageEnabled) {
@@ -1524,7 +1829,7 @@ PlasmoidItem {
             acceptedButtons: Qt.LeftButton | Qt.MiddleButton
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
-            onEntered: root.segHovered(mi.seg, mi)
+            onPositionChanged: function(m) { root.segHoverAt(mapToItem(null, 0, m.y).y / Window.height, mi.seg, mi) }
             // fast slides can deliver the next segment's enter before this exit;
             // only clear if this segment still owns the tooltip
             onExited: if (root.hoverSeg === mi.seg) root.hoverSeg = ""
@@ -1569,7 +1874,7 @@ PlasmoidItem {
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
-                    onEntered: root.segHovered("bat", parent)
+                    onPositionChanged: function(m) { root.segHoverAt(mapToItem(null, 0, m.y).y / Window.height, "bat", parent) }
                     onExited: if (root.hoverSeg === "bat") root.hoverSeg = ""
                     onWheel: function(wheel) { root.batWheel(wheel) }
                     onClicked: function(mouse) {
@@ -1659,7 +1964,7 @@ PlasmoidItem {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: root.segHovered("ai", parent)
+                        onPositionChanged: function(m) { root.segHoverAt(mapToItem(null, 0, m.y).y / Window.height, "ai", parent) }
                         onExited: if (root.hoverSeg === "ai") root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.MiddleButton) root.launchApp("xdg-open https://claude.ai/settings/usage")
@@ -1687,7 +1992,7 @@ PlasmoidItem {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
-                        onEntered: root.segHovered("ai", parent)
+                        onPositionChanged: function(m) { root.segHoverAt(mapToItem(null, 0, m.y).y / Window.height, "ai", parent) }
                         onExited: if (root.hoverSeg === "ai") root.hoverSeg = ""
                         onClicked: function(mouse) {
                             if (mouse.button === Qt.MiddleButton) root.launchApp("xdg-open https://chatgpt.com/codex/settings/usage")
@@ -1727,7 +2032,7 @@ PlasmoidItem {
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
-                    onEntered: root.segHovered("bat", parent)
+                    onPositionChanged: function(m) { root.segHoverAt(mapToItem(null, 0, m.y).y / Window.height, "bat", parent) }
                     onExited: if (root.hoverSeg === "bat") root.hoverSeg = ""
                     onWheel: function(wheel) { root.batWheel(wheel) }
                     onClicked: function(mouse) {
@@ -1741,12 +2046,20 @@ PlasmoidItem {
 
     // ── Popup view ──────────────────────────────────────────────
     fullRepresentation: Item {
-        implicitWidth: popupLayout.implicitWidth + 44
+        // ceil: Text implicit sizes are fractional and the popup window rounds
+        // to whole pixels — a 0.5px shortfall makes both scrollbars appear
+        implicitWidth: Math.ceil(popupLayout.implicitWidth) + 44
         // capped so a growing model list can't outrun the screen — content
         // scrolls instead of getting clipped
-        implicitHeight: Math.min(popupLayout.implicitHeight + 44, 940)
+        implicitHeight: Math.min(Math.ceil(popupLayout.implicitHeight) + 44, 940)
         Layout.preferredWidth: implicitWidth
         Layout.preferredHeight: implicitHeight
+        // min=max pins the popup to content size: Plasma otherwise persists a
+        // manually dragged popupWidth/popupHeight and auto-sizing never runs
+        Layout.minimumWidth: implicitWidth
+        Layout.maximumWidth: implicitWidth
+        Layout.minimumHeight: implicitHeight
+        Layout.maximumHeight: implicitHeight
 
         Rectangle {
             anchors.fill: parent
@@ -1765,6 +2078,7 @@ PlasmoidItem {
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
+            ScrollBar.horizontal: ScrollBar {}
 
         ColumnLayout {
             id: popupLayout
@@ -1836,253 +2150,6 @@ PlasmoidItem {
                 procs: root.topApps
             }
 
-            // ── Claude usage section ──
-            Text {
-                visible: root.popupMode === "claude"
-                textFormat: Text.RichText
-                text: root.claudeIconHtml()
-                    + ' <b style="font-size:13pt; color:' + root.claudeIconHex + ';">Claude</b>'
-                    + (root.claudePlan ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">' + root.claudePlan
-                        + (root.claudeTier ? ' (' + root.claudeTier + ')' : '') + '</span>' : '')
-            }
-            Text {
-                visible: root.popupMode === "claude" && root.claudeStale
-                textFormat: Text.RichText
-                text: '<span style="color:' + root.claudeWarnHex + ';">&#x26A0; cached data — ' + root.claudeError + '</span>'
-            }
-            Rectangle {
-                id: fableAlertBanner
-                property var limit: root.fableLimit()
-                property string alertState: root.fableAlertState(fableAlertBanner.limit)
-                property bool reportedOut: root.fableAccessActive()
-                property bool dimmed: root.claudeStale && !fableAlertBanner.reportedOut
-                visible: root.popupMode === "claude" && fableAlertBanner.alertState !== ""
-                Layout.fillWidth: true
-                Layout.preferredWidth: 480
-                implicitHeight: fableAlertColumn.implicitHeight + 20
-                radius: 6
-                color: fableAlertBanner.reportedOut ? "#30EF5350"
-                    : (fableAlertBanner.dimmed ? "#168A8A8A"
-                        : (fableAlertBanner.alertState === "exhausted" ? "#30EF5350" : "#26FF9E45"))
-                border.width: 1
-                border.color: fableAlertBanner.reportedOut ? root.claudeCritHex
-                    : (fableAlertBanner.dimmed ? root.claudeDimHex
-                        : (fableAlertBanner.alertState === "exhausted"
-                            ? root.claudeCritHex : root.claudeWarnHex))
-
-                Column {
-                    id: fableAlertColumn
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.margins: 10
-                    spacing: 3
-
-                    Text {
-                        width: parent.width
-                        color: fableAlertBanner.reportedOut ? root.claudeCritHex
-                            : (fableAlertBanner.dimmed ? root.claudeDimHex
-                            : (fableAlertBanner.alertState === "exhausted"
-                                ? root.claudeCritHex : root.claudeWarnHex)
-                            )
-                        font.pointSize: 11
-                        font.bold: true
-                        text: fableAlertBanner.reportedOut
-                            ? "⚠ Fable 5 included access is out until the weekly reset"
-                            : (fableAlertBanner.alertState === "exhausted"
-                                ? "⚠ Fable 5 included limit reached" + (fableAlertBanner.dimmed ? " (cached)" : "")
-                                : "⚠ Fable 5 included usage is low" + (fableAlertBanner.dimmed ? " (cached)" : ""))
-                    }
-                    Text {
-                        width: parent.width
-                        color: fableAlertBanner.dimmed ? root.claudeDimHex : "#FFFFFF"
-                        font.pointSize: 10
-                        wrapMode: Text.WordWrap
-                        text: root.fableAlertDetail(fableAlertBanner.limit)
-                    }
-                }
-            }
-            Repeater {
-                model: root.popupMode === "claude" ? root.claudeLimits : []
-                LimitRow {
-                    label: root.claudeLimitLabel(modelData)
-                    pct: modelData.percent
-                    barColor: root.claudeLimitColor(modelData)
-                    resetTxt: root.claudeFmtReset(modelData.resets_at)
-                    resetColor: root.claudeResetHex
-                }
-            }
-            Text {
-                visible: root.popupMode === "claude" && root.claudePaceLine() !== ""
-                color: root.claudeWarnHex
-                font.pointSize: 9
-                text: root.claudePaceLine()
-            }
-            RowLayout {
-                visible: root.popupMode === "claude" && root.claudeHist.length > 1
-                spacing: 10
-                Canvas {
-                    id: claudeSpark
-                    Layout.preferredWidth: 240
-                    Layout.preferredHeight: 30
-                    width: 240; height: 30
-                    property var pts: root.claudeHist
-                    onPtsChanged: requestPaint()
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        ctx.strokeStyle = "#33888888"
-                        ctx.lineWidth = 1
-                        ctx.beginPath(); ctx.moveTo(0, height - 1); ctx.lineTo(width, height - 1); ctx.stroke()
-                        var now = Date.now() / 1000, from = now - 86400
-                        ctx.strokeStyle = root.claudeOkHex
-                        ctx.lineWidth = 1.5
-                        ctx.beginPath()
-                        var started = false
-                        for (var i = 0; i < pts.length; i++) {
-                            if (pts[i].t < from) continue
-                            var x = (pts[i].t - from) / 86400 * width
-                            var y = height - 2 - (pts[i].p / 100) * (height - 4)
-                            if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
-                        }
-                        ctx.stroke()
-                    }
-                }
-                Text { color: root.claudeDimHex; font.pointSize: 8; text: "5h window, last 24h" }
-            }
-            // ── Codex section ──
-            Rectangle {
-                visible: root.popupMode === "claude" && root.showCodex
-                Layout.fillWidth: true
-                Layout.topMargin: 4
-                Layout.bottomMargin: 4
-                height: 1
-                color: "#33888888"
-            }
-            Text {
-                visible: root.popupMode === "claude" && root.showCodex
-                textFormat: Text.RichText
-                text: root.codexIconHtml()
-                    + ' <b style="font-size:13pt; color:' + root.codexIconHex + ';">Codex</b>'
-                    + (root.codexPlan ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">' + root.codexPlan + '</span>' : '')
-                    + (root.codexFetchedAt ? '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">updated ' + root.codexAge() + '</span>' : '')
-            }
-            Text {
-                visible: root.popupMode === "claude" && root.showCodex && !root.codexWeekly && !root.codexSession
-                color: root.claudeDimHex
-                text: "No codex data"
-            }
-            Repeater {
-                model: root.popupMode === "claude" && root.showCodex ? root.codexRowsList() : []
-                LimitRow {
-                    label: modelData.label
-                    pct: modelData.pct
-                    barColor: modelData.stale ? root.claudeDimHex : root.codexPctColor(modelData.pct)
-                    resetTxt: root.fmtEpochReset(modelData.resets_at)
-                    resetColor: root.codexResetHex
-                }
-            }
-            Text {
-                visible: root.popupMode === "claude" && root.showCodex && root.codexPaceLine() !== ""
-                color: root.claudeWarnHex
-                font.pointSize: 9
-                text: root.codexPaceLine()
-            }
-            RowLayout {
-                visible: root.popupMode === "claude" && root.showCodex && root.codexHist.length > 1
-                spacing: 10
-                Canvas {
-                    Layout.preferredWidth: 240
-                    Layout.preferredHeight: 30
-                    width: 240; height: 30
-                    property var pts: root.codexHist
-                    onPtsChanged: requestPaint()
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        ctx.strokeStyle = "#33888888"
-                        ctx.lineWidth = 1
-                        ctx.beginPath(); ctx.moveTo(0, height - 1); ctx.lineTo(width, height - 1); ctx.stroke()
-                        var now = Date.now() / 1000, from = now - 86400
-                        ctx.strokeStyle = root.codexOkHex
-                        ctx.lineWidth = 1.5
-                        ctx.beginPath()
-                        var started = false
-                        for (var i = 0; i < pts.length; i++) {
-                            if (pts[i].t < from) continue
-                            var x = (pts[i].t - from) / 86400 * width
-                            var y = height - 2 - (pts[i].p / 100) * (height - 4)
-                            if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
-                        }
-                        ctx.stroke()
-                    }
-                }
-                Text { color: root.claudeDimHex; font.pointSize: 8; text: "7d window, last 24h" }
-            }
-
-            // ── Local spend (Claude Code logs — includes any routed models) ──
-            Rectangle {
-                visible: root.popupMode === "claude" && root.ccusageEnabled
-                Layout.fillWidth: true
-                Layout.topMargin: 4
-                Layout.bottomMargin: 4
-                height: 1
-                color: "#33888888"
-            }
-            Text {
-                visible: root.popupMode === "claude" && root.ccusageEnabled
-                textFormat: Text.RichText
-                text: '<b style="font-size:13pt; color:#B0BEC5;">Local spend</b>'
-                    + '&nbsp;&nbsp;<span style="color:' + root.claudeDimHex + ';">this machine, all models in Claude Code logs</span>'
-            }
-            Text {
-                visible: root.popupMode === "claude" && root.ccusageEnabled && root.ccToday() === null
-                color: root.claudeDimHex
-                text: root.ccRunning ? "Loading local stats…" : "No local stats"
-            }
-            GridLayout {
-                visible: root.popupMode === "claude" && root.ccusageEnabled && root.ccToday() !== null
-                columns: 2
-                columnSpacing: 26
-                rowSpacing: 3
-                Text { text: "Today"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
-                Text {
-                    color: "#FFFFFF"; font.pointSize: 10
-                    text: {
-                        var t = root.ccToday()
-                        return t ? "$" + (t.totalCost || 0).toFixed(2) + "  ·  " + root.fmtTokens(t.totalTokens || 0) + " tokens" : ""
-                    }
-                }
-                Text { text: "Last 7 days"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
-                Text {
-                    color: "#FFFFFF"; font.pointSize: 10
-                    text: {
-                        var r = root.ccRange(7)
-                        return "$" + r.cost.toFixed(2) + "  ·  " + root.fmtTokens(r.tokens) + " tokens"
-                    }
-                }
-                Text { text: "Last 30 days"; color: "#FFFFFF"; font.bold: true; font.pointSize: 10 }
-                Text {
-                    color: "#FFFFFF"; font.pointSize: 10
-                    text: {
-                        var r = root.ccRange(30)
-                        return "$" + r.cost.toFixed(2) + "  ·  " + root.fmtTokens(r.tokens) + " tokens"
-                    }
-                }
-            }
-            ColumnLayout {
-                visible: root.popupMode === "claude" && root.ccusageEnabled && root.ccToday() !== null
-                spacing: 1
-                Repeater {
-                    model: root.ccToday() ? (root.ccToday().modelBreakdowns || []) : []
-                    Text {
-                        color: root.claudeDimHex
-                        font.pointSize: 9
-                        text: "    " + modelData.modelName + ": $" + (modelData.cost || 0).toFixed(2)
-                    }
-                }
-            }
-
             // ── Footer: check button + freshness ──
             Rectangle {
                 visible: root.popupMode === "claude"
@@ -2099,14 +2166,19 @@ PlasmoidItem {
                 PlasmaComponents.Button {
                     text: root.checking ? "Checking…" : "Check now"
                     icon.name: "view-refresh"
-                    enabled: !root.checking
+                    enabled: !root.checking && !checkHoldTimer.running
                     onClicked: root.forceCheck()
                 }
                 Item { Layout.fillWidth: true }
                 Text {
-                    color: root.claudeDimHex
+                    textFormat: Text.RichText
                     font.pointSize: 8
-                    text: "Claude updated " + root.fmtAgo(root.claudeFetchedAt)
+                    // claudeError surfaces any failed fetch here; the header's
+                    // "cached data" banner only appears once the cache is >10min old
+                    text: '<span style="color:' + root.claudeDimHex + ';">Claude updated '
+                        + root.fmtAgo(root.claudeFetchedAt) + '</span>'
+                        + (root.claudeError ? ' <span style="color:' + root.claudeWarnHex + ';">· '
+                            + root.claudeError + '</span>' : '')
                 }
             }
         }
@@ -2246,11 +2318,20 @@ PlasmoidItem {
         var lines = output.split("\n")
         var memTotal = 0
         var memAvailable = 0
+        var swapTotal = 0
+        var swapFree = 0
         for (var i = 0; i < lines.length; i++) {
             var parts = lines[i].split(/\s+/)
             if (parts[0] === "MemTotal:")     memTotal = parseInt(parts[1]) || 0
             if (parts[0] === "MemAvailable:") memAvailable = parseInt(parts[1]) || 0
+            if (parts[0] === "SwapTotal:")    swapTotal = parseInt(parts[1]) || 0
+            if (parts[0] === "SwapFree:")     swapFree = parseInt(parts[1]) || 0
+            if (parts[0] === "some") {
+                var m = /avg10=([\d.]+)/.exec(lines[i])
+                if (m) memPressure = parseFloat(m[1]) || 0
+            }
         }
+        swapUsedGB = Math.max(0, swapTotal - swapFree) / 1024.0 / 1024.0
         if (memTotal > 0) {
             var used = memTotal - memAvailable
             prevRamDisplay = ramValue
@@ -2747,7 +2828,7 @@ PlasmoidItem {
         if (showCpu)
             parts.push("echo @CPU; head -1 /proc/stat")
         if (showRam)
-            parts.push("echo @RAM; head -3 /proc/meminfo")
+            parts.push("echo @RAM; grep -E \"^(MemTotal|MemAvailable|SwapTotal|SwapFree):\" /proc/meminfo; cat /proc/pressure/memory 2>/dev/null")
         if (showBat || batteryModeEnabled)
             parts.push("echo @BAT; b=/sys/class/power_supply/" + hwBat + "; cap=$(cat $b/capacity 2>/dev/null || echo -1); ac=$(cat /sys/class/power_supply/" + hwAc + "/online 2>/dev/null || echo 0); en=$(cat $b/energy_now 2>/dev/null || echo 0); ef=$(cat $b/energy_full 2>/dev/null || echo 0); pw=$(cat $b/power_now 2>/dev/null || echo 0); cl=$(cat $b/charge_control_end_threshold 2>/dev/null || echo 100); echo \"$cap|$ac|$en|$ef|$pw|$cl\"")
         if (showCpuTemp || showGpuTemp)

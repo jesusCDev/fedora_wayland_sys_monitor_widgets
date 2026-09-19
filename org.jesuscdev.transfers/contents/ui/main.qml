@@ -26,6 +26,13 @@ PlasmoidItem {
         ? PlasmaCore.Types.ActiveStatus
         : PlasmaCore.Types.HiddenStatus
 
+    // Suppress the built-in tooltip; we anchor our own styled one
+    toolTipMainText: ""
+    toolTipSubText: ""
+
+    property bool hoverJobs: false
+    property Item panelAnchor: null
+
     // Panel font scaling: track panel thickness, ~10pt at the default 40px
     property real panelHeight: 0
     readonly property real panelPt: panelHeight > 0
@@ -34,6 +41,31 @@ PlasmoidItem {
     readonly property color accent: "#FFD98E"
     readonly property color track: "#33888888"
     readonly property color dim: "#888888"
+
+    // Panel shows only the lead job: the running one with the highest
+    // percentage (ties keep the lowest row index).
+    property int leadIndex: -1
+
+    function recomputeLead() {
+        var N = NotificationManager.Notifications
+        var best = -1, bestPct = -1
+        for (var i = 0; i < jobs.count; i++) {
+            var ix = jobs.index(i, 0)
+            if (jobs.data(ix, N.JobStateRole) === N.JobStateStopped) continue
+            var pct = jobs.data(ix, N.PercentageRole) || 0
+            if (pct > bestPct) { bestPct = pct; best = i }
+        }
+        leadIndex = best
+    }
+    Timer { id: leadTimer; interval: 0; onTriggered: root.recomputeLead() }
+    Connections {
+        target: jobs
+        function onCountChanged() { leadTimer.restart() }
+        function onDataChanged() { leadTimer.restart() }
+        function onModelReset() { leadTimer.restart() }
+        function onLayoutChanged() { leadTimer.restart() }
+        function onRowsRemoved() { leadTimer.restart() }
+    }
 
     function fmtBytes(b) {
         if (b >= 1073741824) return (b / 1073741824).toFixed(1) + " GB"
@@ -56,13 +88,105 @@ PlasmoidItem {
         return s + "s left"
     }
 
-    // ── Panel: one mini bar per job ─────────────────────────────
+    // ── Hover tooltip ─────────────────────────────────────────
+    PlasmaCore.Dialog {
+        type: PlasmaCore.Dialog.Tooltip
+        flags: Qt.WindowDoesNotAcceptFocus | Qt.ToolTip
+        location: Plasmoid.location
+        visualParent: root.panelAnchor
+        visible: root.hoverJobs && root.panelAnchor !== null && !root.expanded
+
+        mainItem: Item {
+            implicitWidth: ttFrame.implicitWidth
+            implicitHeight: ttFrame.implicitHeight
+
+            Rectangle {
+                id: ttFrame
+                implicitWidth: ttCol.implicitWidth + 32
+                implicitHeight: ttCol.implicitHeight + 28
+                color: "transparent"
+                border.color: "#30FFFFFF"
+                border.width: 1
+                radius: 8
+
+                ColumnLayout {
+                    id: ttCol
+                    x: 16
+                    y: 14
+                    spacing: 6
+
+                    Text {
+                        font.bold: true
+                        font.pointSize: 11
+                        color: "#FFFFFF"
+                        text: root.hasJobs
+                            ? (jobs.activeJobsCount === 1 ? "1 transfer" : jobs.activeJobsCount + " transfers")
+                            : "No active transfers"
+                    }
+
+                    Repeater {
+                        model: jobs
+                        delegate: ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            visible: model.jobState !== NotificationManager.Notifications.JobStateStopped
+
+                            readonly property var job: model.jobDetails
+                            readonly property bool paused: model.jobState === NotificationManager.Notifications.JobStateSuspended
+
+                            RowLayout {
+                                spacing: 6
+                                Text {
+                                    text: (model.percentage || 0) + "%"
+                                    color: root.accent
+                                    font.pointSize: 10
+                                    font.bold: true
+                                    textFormat: Text.PlainText
+                                }
+                                Text {
+                                    text: model.summary || "Transfer"
+                                    color: "#FFFFFF"
+                                    font.pointSize: 10
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideMiddle
+                                    Layout.maximumWidth: 360
+                                }
+                            }
+
+                            Text {
+                                visible: text !== ""
+                                color: root.dim
+                                font.pointSize: 9
+                                textFormat: Text.PlainText
+                                text: {
+                                    if (!job) return ""
+                                    var parts = []
+                                    if (paused) parts.push("paused")
+                                    else if (job.speed > 0) parts.push(root.fmtSpeed(job.speed))
+                                    if (job.totalBytes > 0)
+                                        parts.push(root.fmtBytes(job.processedBytes) + " / " + root.fmtBytes(job.totalBytes))
+                                    var eta = paused ? "" : root.fmtEta(job)
+                                    if (eta) parts.push(eta)
+                                    var dest = job.descriptionValue2 || job.descriptionValue1
+                                    if (dest) parts.push(dest)
+                                    return parts.join("   ·   ")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Panel: lead job bar, others fold into "+N" ──────────────
     compactRepresentation: Item {
         id: compactRoot
         onHeightChanged: if (height > 0) root.panelHeight = height
         Layout.preferredWidth: barsRow.width
         Layout.minimumWidth: barsRow.width
         Layout.maximumWidth: barsRow.width
+        Component.onCompleted: root.panelAnchor = compactRoot
 
         Row {
             id: barsRow
@@ -74,6 +198,10 @@ PlasmoidItem {
                 delegate: Row {
                     spacing: 5
                     anchors.verticalCenter: parent.verticalCenter
+                    // Only the lead job's row shows in the panel; leadIndex is
+                    // -1 when no non-stopped job exists, so this already
+                    // excludes stopped/finished jobs.
+                    visible: index === root.leadIndex
 
                     Rectangle {
                         width: Math.round(46 * root.panelPt / 10)
@@ -97,6 +225,14 @@ PlasmoidItem {
                         font.bold: true
                         anchors.verticalCenter: parent.verticalCenter
                     }
+                    Text {
+                        visible: jobs.activeJobsCount > 1
+                        text: "+" + (jobs.activeJobsCount - 1)
+                        color: root.dim
+                        font.pointSize: root.panelPt
+                        font.bold: false
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
         }
@@ -104,6 +240,13 @@ PlasmoidItem {
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            // top 60% of panel only: overshooting a Chrome tab into the panel must not pop the tip
+            onPositionChanged: function(m) {
+                var f = mapToItem(null, 0, m.y).y / Window.height
+                if (Plasmoid.location === PlasmaCore.Types.BottomEdge ? f > 0.4 : f < 0.6) root.hoverJobs = true
+            }
+            onExited: root.hoverJobs = false
             onClicked: root.expanded = !root.expanded
         }
     }
@@ -135,6 +278,7 @@ PlasmoidItem {
                 delegate: ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
+                    visible: model.jobState !== NotificationManager.Notifications.JobStateStopped
 
                     readonly property var job: model.jobDetails
                     readonly property bool paused: model.jobState === NotificationManager.Notifications.JobStateSuspended

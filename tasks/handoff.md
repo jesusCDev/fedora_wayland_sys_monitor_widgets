@@ -1,107 +1,132 @@
-# Handoff — written 2026-08-18 16:10 EDT
+# Handoff — written 2026-09-13 (evening, local; log timestamps are UTC 2026-09-14)
 
 ## TASK
-
-KDE Plasma 6 panel widgets (repo symlinked into `~/.local/share/plasma/plasmoids/`).
-Current thread: finish the hover-tooltip re-anchor work in
-`org.jesuscdev.sysmonitor/contents/ui/main.qml` and land the 2026-08-18
-validation-sweep fixes (three parallel opus audits of the 08-13..16 work).
+KDE Plasma 6 panel widgets repo (`~/Programming/fedora_wayland_sys_monitor_widgets`,
+each `org.jesuscdev.*` dir symlinked into `~/.local/share/plasma/plasmoids/`).
+Main thread: `org.jesuscdev.notify` ("Notify Inline"), a second notification bell
+the user runs NEXT TO the stock one, iterated through user feedback rounds. This
+session (2026-09-12 → 2026-09-13) also touched the transfers widget and the
+bluetooth widget's panel icon. All delivered and reloaded; waiting on the user's
+next round or "go" to commit.
 
 User constraints not written elsewhere:
-- User rejected manual tooltip placement (mapToGlobal + clamping) on 2026-08-16
-  — "this is way worse". Never reintroduce it. `visualParent` + rearm blink is
-  the accepted approach.
-- User rejected scroll-wheel gestures once (workspaces widget). Ask before
-  adding ANY scroll interaction anywhere (battery brightness scroll is parked
-  on this).
-- User declined AI-segment width reservation (countdown moves ~every 10 min).
-- Caveman (terse prose) + Ponytail (laziest working fix) modes active.
-  Commits/code in normal prose.
+- Commit ONLY when the user says "go". Everything since commit 6cc571e is one
+  uncommitted batch (see STATE). Before committing, ask about two generated
+  binaries: `org.jesuscdev.sysmonitor/contents/icons/fable-mascot.png` (untracked)
+  and the three notify bell PNGs (intent-to-add). `assets/masters/*.png` stays ignored.
+- Bell rows stay until the user dismisses them (they said so on 2026-09-13; the
+  earlier 60-minute auto-dismiss sweep was removed for that reason).
+- No manual tooltip placement (`visualParent` + rearm timer is the accepted way).
+- Ask before adding ANY scroll gesture. User declined AI-segment width reservation.
+- Hover popups trigger only in the top 60% of the panel (Chrome tab overshoot).
+- Caveman (terse prose) + Ponytail (laziest working solution) modes active;
+  code/commits/security text in normal prose. Global CLAUDE.md now has an
+  "Output Formatting" section: one sentence per line, paths/commands in fenced
+  blocks, bold lead words.
 
-## DONE
+## DONE (all verified, all uncommitted)
+Batch before this session (2026-08-30 → 2026-09-02): bluetooth plasmoid, sysmonitor
+check-now throttle/force + `flock`, Fable banner removal, `fablePanelPct` +
+fable-mascot.png, hover/popup restructuring, `codexSparkEnabled`, fableSpent logic,
+RAM PSI warn, hover dead zone, NET hover headline; notify rounds 1–4 (seen() rule,
+tabs, content-sized popup pinned via Layout.min/max). Details in `tasks/completed.md`.
 
-- All of `tasks/todo.md` up through the 08-16 attention-blink work (committed
-  through `7646042`, pushed).
-- 2026-08-18 validation sweep (3 opus audit agents) — findings + resolutions
-  recorded in `tasks/reviews.md` section "2026-08-18 02:12". Fixes applied to
-  main.qml (UNCOMMITTED, see STATE):
-  - `[tipdbg]` debug logs stripped (3 console.log lines).
-  - Tooltip rearm: `Qt.callLater` replaced with zero-interval
-    `Timer { id: tipRearmTimer }` (main.qml ~:401,408) — callLater fires in the
-    same event-loop pass, Dialog can coalesce hide+show and skip repositioning.
-  - `metricIconAspect`: gpu 1.49 -> 1.5, ram 2.46 -> 2.4615 (real PNG dims).
-  - Net hover SSID: `netConn = f.slice(2).join("|")` (was `f[2]` — truncated
-    names containing `|`), plus guard turning nmcli's literal `--` into "".
-  - AC probe now requires `type = Mains` (USB-C PD source ports also expose
-    `online`; old code picked first alphabetical).
-  - `refreshAll()` now called from `parseHwProbe()` completion instead of
-    synchronously after async `probeHardware()` — first sample used default
-    paths before (wrong battery on non-BAT0 machines). Tick Timer still drives
-    later refreshes.
-- plasmashell restarted 2026-08-18 02:12 (PID 2713981) — **first instance ever
-  to load the tooltip fix** (previous PID 2440 ran since 08-15 21:20, predating
-  the 08-16 01:22 main.qml edits; 7-day journal had zero `[tipdbg]` lines).
-  Evidence: `systemctl --user show plasma-plasmashell -p ActiveEnterTimestamp`.
-- Panel verified rendering clean post-restart (screenshot, no QML errors beyond
-  the known-harmless `main.qml:12 Unable to assign [undefined] to
-  QQmlComponent*`).
-- `tasks/reviews.md` 08-16 attention-blink section: resolution boxes checked.
+2026-09-12 / 2026-09-13 (this session), evidence noted per item:
+- Panel icons: bell (`Image`, 1.8×panelPt) and bluetooth rune (`Text`, 1.5×panelPt)
+  are real items in a `Row`, centred; measured from screenshots at 25px/28px ink,
+  centred at 27.5–28 vs text 27. Inline `<img>` had ridden the baseline ~3px high.
+- Transfers widget: finished jobs no longer linger — both delegates hide
+  `JobStateStopped` rows. Proven with synthetic D-Bus job views (before: A 30% +
+  B 100% drawn; after: only A). Script pattern: `org.kde.JobViewServer.requestView`
+  + `org.kde.JobViewV2` calls from one persistent Gio connection.
+- Notify: auto-dismiss sweep + `maxAgeMin` removed; deprecated injected
+  `expanded` param replaced by `root.expanded`.
+- Notify popup: tabs replaced by stacked sections (Critical → System → Personal,
+  empty ones hidden), fixed footer with count line + "clear all", content width
+  340–520, height cap 600, scrollbar lane (20px) only when the list overflows.
+- Notify grouping: rows fold by key = section + (matched group rule | app + summary).
+  Head shows "+N" pill; head × dismisses the group; double-click unfolds twins
+  INSIDE the head (time, own summary if different, body, own ×, click copies).
+  Group rules config `groupPatterns` (default "claude, youtube") fold rows from
+  any app. Proven via temp debug log (Chrome "Claude" + notify-send "Claude
+  finished" one group; YouTube HD its own; critical row alone on top).
+- Notify Critical section: `urgency === Critical` → section 2, red header, pinned top.
+- Notify logging: every inserted row → TSV line (time, app, desktop entry,
+  notifyrc, urgency 1/2/4, summary, body) in `~/.local/state/notify-inline.log`,
+  0600/0700 via `umask 077`, `flock` serialised, trimmed 3000→2000 lines,
+  `logEnabled` toggle (default on). Burst of 6 → 6 lines.
+- Drawn × (`CloseButton` inline component, 20px hit box, hover ring); rows have
+  8px right padding.
+- xreview 2026-09-14 section: 6 findings, 4 fixed (bluetooth `pair && trust &&
+  connect`; log hardening; sysmonitor Claude tooltip gated by `showClaude`), 2
+  dismissed with reasons. Ledger 0 open. Earlier session xreviews also clean.
+- Docs: `tasks/completed.md` created (all finished sections archived),
+  `tasks/lessons.md` gained 2026-09-02 and 2026-09-13 entries, memory notes updated
+  (popup size sticky, panel icon centring, log path).
 
 ## IN PROGRESS
-
-Nothing mid-flight. Next action = REMAINING item 1.
+Nothing mid-flight. Last action: plasmashell restarted 2026-09-13 ~22:45 local
+with the clean tree; test rows seeded in the bell (one Critical, a Claude group,
+YouTube HD, Signal, six "Burst" rows). Journal clean.
 
 ## REMAINING (ordered)
-
-1. **User retests hover tooltips** (blocked on user): slide across every
-   segment (CPU -> GPU -> RAM -> DISK -> NET -> BAT -> AI, and across the
-   battery divider). Prior "works for all but GPU" report was measured against
-   pre-fix code, so GPU may already be fine. If GPU still anchors wrong: the
-   one real GPU asymmetry is `gpu-top.sh` taking ~700ms (hardcoded `sleep 0.6`)
-   while every other hover source is <10ms — tooltip shows with the "GPU idle"
-   placeholder width, then resizes when data lands; test by dropping the sleep
-   to 0.05 and re-sliding.
-2. **Right-edge clipping check**: rightmost segments' tooltips must not run off
-   screen. Verify whether Plasma's Dialog already clamps before writing ANY
-   code (manual placement is banned, see TASK).
-3. **Commit** the uncommitted work (attention blink + tooltip rearm + sweep
-   fixes + todo/reviews updates) once item 1 passes. Logical split: one commit
-   for attention blink, one for tooltip rearm + sweep fixes — or a single
-   commit; user hasn't expressed a preference.
-4. Low-value todo items (see "Open after the 2026-08-18 validation sweep" in
-   tasks/todo.md): bogus first tick after re-enabling a metric
-   (`netFirstRun`/`cpuFirstRun`), dropped-tick double-interval division,
-   delete dead `claude-mascot@2x.png` (26x26, referenced by nothing).
-5. Parked, needs user go/no-go: battery scroll-wheel = screen brightness.
+0. (2026-09-19) Batch is committed as 6f62e6a; items 1–2 below are closed. Push only if the user asks.
+1. User verdict on the 2026-09-13 rounds (sections/footer, grouping, double-click
+   twins, critical section, icon sizes, transfers). Read
+   `~/.local/state/notify-inline.log` first when they ask about a specific
+   notification (urgency column tells whether "100%" alerts are critical; if not,
+   a group rule or an urgency-free "priority" rule is the next step).
+2. On "go": commit the whole batch after asking about the two binaries above.
+3. No open xreview obligations. Any further change touching >1 file needs
+   `~/.local/bin/xreview.sh "<title>"` + triage in `tasks/reviews.md`.
+4. Optional, only if asked: centre sysmonitor's inline panel icons (they sit ~3px
+   above the text line, same inline-<img> cause); per-section "clear" links.
 
 ## STATE
-
-- Branch: `main`, in sync with origin through `7646042`.
-- Uncommitted: `org.jesuscdev.sysmonitor/contents/ui/main.qml` (attention blink
-  + tooltip rearm + sweep fixes), `tasks/todo.md`, `tasks/reviews.md`
-  (untracked). ALL of it is intended for commit after the hover retest passes.
-- No background work running. Audit agents finished; results are fully folded
-  into tasks/reviews.md.
-- Scratch: session scratchpad held panel screenshots only, disposable.
-- `/route`'s `agent-routing.sh` is missing from disk (exit 127) — this session
-  used `opus` for subagents per the user's explicit instruction.
+- Branch `main`, HEAD 6f62e6a (batch committed 2026-09-19, not pushed). Working tree clean except the empty root `todo.md` inbox (untracked on purpose).
+- Uncommitted (mixed staged/unstaged/intent-to-add; one batch on "go"):
+  `org.jesuscdev.notify/**` (new), `org.jesuscdev.bluetooth/**` (new),
+  `org.jesuscdev.sysmonitor/contents/{config/main.xml,scripts/fetch-usage.sh,ui/configMetrics.qml,ui/main.qml}`,
+  `org.jesuscdev.transfers/contents/ui/main.qml`, `assets/masters/icon-bell.prompt.txt`,
+  `tasks/{todo,completed,reviews,lessons,handoff}.md`.
+  Untracked: `org.jesuscdev.sysmonitor/contents/icons/fable-mascot.png` (ask first).
+  Must NOT be committed: `assets/masters/*.png` (gitignored), any credentials
+  (none in tree; `fetch-usage.sh` reads them at runtime only).
+- No background work. plasmashell live with the current tree.
+- Scratch dir (session-specific, may be gone):
+  `/tmp/claude-1000/-home-jesuscdev-Programming-fedora-wayland-sys-monitor-widgets/62e10e0b-bf24-4a15-a731-ae0ba78cb9a8/scratchpad`
+  held `twojobs.py`/`fakejob.py` (synthetic KDE jobs), `width-test.qml`,
+  screenshots, pre-change copies of notify/bluetooth main.qml, fetched KDE sources
+  (`appletpopup.cpp`, `jobsmodel_p.cpp`, `job_p.cpp`, `notifications.cpp`, …).
+- Panel layout: notify is applet 49, `AppletOrder=3;37;35;46;28;47;43;49;45;22;48;29;30`.
+  Its config in appletsrc sits under a doubled group
+  `[Containments][2][Applets][49][Configuration][Configuration][General]`; that
+  is where `Plasmoid.configuration` reads on this box (verified 2026-09-02).
 
 ## GOTCHAS
-
-- **Restart before judging any main.qml change.** The entire "GPU tooltip
-  broken" saga was a stale plasmashell instance. Verify
-  `ActiveEnterTimestamp` postdates the file's mtime before trusting behavior.
-- Restart loop: `systemctl --user restart plasma-plasmashell && sleep 12`,
-  then journalctl grep (ignore `QQmlComponent` line-10/12 warnings), then
-  `spectacle -b -f -n -o file.png` (a too-early capture returns solid black).
-- `qdbus6` does not exist on this box; use `qdbus`.
-- `ls` is aliased to colorls (no `-R`); use `find` for recursive listings.
-- Live widget config edits: qdbus evaluateScript with
-  `w.currentConfigGroup=["Configuration","General"]; w.writeConfig(k,v);
-  w.reloadConfig()`. `showBatSpacer` was enabled this way on both live
-  instances — it is NOT the config-file default.
-- The workspaces tooltip line prefix uses an em-space (U+2003); plain Edit
-  fails on it — use a python3 heredoc with an assert on count.
-- xreview ledger rule: every feature section in `tasks/reviews.md` needs all
-  boxes checked before "done". Both existing sections are fully checked; the
-  08-18 section's "Open" note (hover retest) maps to REMAINING item 1.
+- Restart loop: `systemctl --user restart plasma-plasmashell && sleep 18`, then
+  `journalctl --user -u plasma-plasmashell --since <time> | grep -iE 'jesuscdev\.(notify|bluetooth|transfers)|util\.js' | grep -v 'Unable to assign'`.
+  Clean journal only proves the QML parsed. `console.warn` never reaches journald;
+  debug by appending to a scratch file through the widget's own executable
+  DataSource (`fire("printf '%s\\n' '...' >> file #" + seq)`), then restore the
+  clean copy — keep a `cp` of main.qml before adding TEMP lines.
+- A plasmashell restart EMPTIES notification history and job views.
+- KDE unread rule: `ReadRole` is a flag only the stock toast sets; real rule is
+  `!read && (updated||created) > lastRead`; `lastRead` is process-wide.
+- Fedora ships `[Applications][@other] ShowInHistory=false`; `historyBlacklist()`
+  drops `@other` or notify-send rows vanish.
+- Plasma `AppletPopup` saves popup size on every close and then ignores implicit
+  size; only `Layout.minimum*/maximum*` on `fullRepresentation` still resize it.
+- Finished KDE jobs stay in the model as `JobStateStopped` until the stock
+  toast calls `expire()`, which never happens under fullscreen inhibition.
+- Panel is 38 logical = 57 physical px (scale 1.5). Screenshots via
+  `spectacle -b -f -n -o file` work when no fullscreen window covers the panel;
+  measure ink runs with PIL/numpy (see scratch scripts) — cheaper than guessing.
+- Executable DataSource runs through `sh`; every command string must be unique
+  (`#<seq>` suffix, monotonic — not the millisecond clock, bursts coalesce).
+- Cutting a QML block with a substring search for `"    }\n"` matched an inner
+  8-space brace first and left a dangling `}` once; cut by exact text or regex
+  anchored at line start.
+- `ls` is aliased to colorls (breaks `-R`/paths); use find/echo.
+- `/route` before dispatching subagents; max two at once.
+- Stop hook blocks "done" while `tasks/reviews.md` has unchecked boxes (0 now).

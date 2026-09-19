@@ -154,6 +154,12 @@
         <entry name="aiResetCountdown" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="fablePanelPct" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="codexSparkEnabled" type="Bool">
+            <default>false</default>
+        </entry>
         <entry name="notifyEnabled" type="Bool">
             <default>true</default>
         </entry>

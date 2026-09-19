@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/2.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/2.0
+                          http://www.kde.org/standards/kcfg/2.0/kcfg.xsd">
+    <kcfgfile name=""/>
+    <group name="General">
+        <entry name="historyLimit" type="Int">
+            <default>30</default>
+            <min>5</min>
+            <max>200</max>
+        </entry>
+        <entry name="readOnClose" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="chipsEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="logEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="groupPatterns" type="String">
+            <default>claude, youtube</default>
+        </entry>
+        <entry name="systemApps" type="String">
+            <default>selinux|setroubleshoot|abrt|discover|packagekit|fwupd|dnf|firewall|update|networkmanagement|powerdevil|bluedevil|plasma_workspace|kwin|ksmserver|kded|devicenotifications|freespacenotifier|oom_notifier|drkonqi|polkit|kaccess|printmanager|ksecretd|kwrited|xdg-desktop-portal</default>
+        </entry>
+    </group>
+</kcfg>

@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Authors": [{"Name": "jesuscdev"}],
+        "Category": "Utilities",
+        "Description": "Compact notification history with one-click copy of bodies, codes and links",
+        "Icon": "notifications",
+        "Id": "org.jesuscdev.notify",
+        "Name": "Notify Inline",
+        "Version": "1.0.0"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
