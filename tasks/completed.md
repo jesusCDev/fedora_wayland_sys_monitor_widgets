@@ -263,3 +263,16 @@ Finished sections moved from `tasks/todo.md` (archived 2026-09-12; oldest first,
   Implicitly accepted 2026-09-19: user said "go to commit" with everything in place.
 - [x] "go" to commit the batch since 6cc571e (ask about `fable-mascot.png` and the three bell PNGs first)
   Done 2026-09-19: asked, user chose to include both; commit 6f62e6a (26 files, +2554/−500), masters not staged, not pushed.
+
+## 2026-09-24 — push, sysmonitor icon centring, notify per-section clear
+
+- [x] Push the 2026-09-19 batch commit to origin.
+  2026-09-24 · b66a2fc · push 6cc571e..b66a2fc accepted, main level with origin/main; secret scan of added lines clean.
+- [x] Sysmonitor: centre the inline panel icons on the text line (they ride ~3px high, inline `<img>` on the baseline).
+  2026-09-25 · sysmonitor main.qml (uncommitted) · align="middle" on codex + metric img tags only; live screenshot 00:23: cpu/gpu/net/codex from -3/-2/-3/-3 px (sim baseline) to +0.5/+0.5/+1.0/+0.5, ram/claude/fable/battery within 0.5; text rows and applet widths unchanged; journal clean.
+- [x] Notify: per-section "clear" control in each popup section header, scoped to that section's rows and group twins.
+  2026-09-25 · notify main.qml (uncommitted) · live TEMP run: clearing Personal took all 3 rows incl. twin to 0 with System 2 / Critical 1 unchanged; clearing System left Critical 1 and hid its control; margin 14 puts "clear" on the × glyph ink (0 px); TEMP removed, file cmp-identical to baseline, journal clean.
+- [x] UX audit (ux-designer) of the new section clear control.
+  2026-09-25 · popup crops · hit box 51x30 (51x24 worst), label matches footer verb, accessible name per section, grey on red header, ~8.8:1 contrast, label/header height unchanged. Keyboard: popup has none anywhere (pre-existing), control matches footer.
+- [x] Cross-review (xreview) of the combined diff; `tasks/reviews.md` section fully checked.
+  2026-09-25 · reviews.md "Sysmonitor icon centring + Notify per-section clear" · gpt-6-luna, no findings.

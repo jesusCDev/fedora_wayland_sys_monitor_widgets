@@ -12,3 +12,8 @@
 - "The alerts aren't going away" (2026-09-02) got a 60-minute auto-dismiss sweep built on a guess; the user meant the transfers widget's progress bars. When a report could name two or more things, one AskUserQuestion with the candidates costs seconds; a feature on the wrong reading cost a round trip plus its removal.
 - Cutting a block with a substring search for `"    }\n"` matched the inner 8-space brace first and left a dangling `}` (syntax error at reload). Cut whole functions by regex anchored at line start, or just Edit the exact text.
 - Synthetic KDE job views over D-Bus (`org.kde.JobViewServer.requestView` + `org.kde.JobViewV2` calls from one persistent connection) reproduce Dolphin/browser transfer behaviour without touching files; keep `scratchpad/twojobs.py`-style scripts for job widgets.
+
+## 2026-09-25 — test seeds must not look like real traffic
+- The notify brief pointed the live test at the default "youtube" group rule; the user's real YouTube downloader rows folded into the test group and the section clear dismissed them (still in the notify log, but gone from the bell). Seed with app names and group keys nothing real can match, and warn up front that any section-wide clear test also takes real rows that arrive mid-test.
+- Two parallel delegates shared one scratch dir and one overwrote the other's `main.qml.orig`. Every brief names its own scratch subdirectory.
+- A fullscreen window blocked the first panel measurement. Probe KWin's active window before any screenshot or programmatic popup (memory: kwin-fullscreen-probe), and never open a widget popup over a fullscreen window.

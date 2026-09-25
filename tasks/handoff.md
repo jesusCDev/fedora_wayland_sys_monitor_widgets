@@ -1,4 +1,4 @@
-# Handoff — written 2026-09-13 (evening, local; log timestamps are UTC 2026-09-14)
+# Handoff — written 2026-09-13 (evening, local); REMAINING/STATE updated 2026-09-25
 
 ## TASK
 KDE Plasma 6 panel widgets repo (`~/Programming/fedora_wayland_sys_monitor_widgets`,
@@ -70,28 +70,20 @@ with the clean tree; test rows seeded in the bell (one Critical, a Claude group,
 YouTube HD, Signal, six "Burst" rows). Journal clean.
 
 ## REMAINING (ordered)
-0. (2026-09-19) Batch is committed as 6f62e6a; items 1–2 below are closed. Push only if the user asks.
-1. User verdict on the 2026-09-13 rounds (sections/footer, grouping, double-click
-   twins, critical section, icon sizes, transfers). Read
-   `~/.local/state/notify-inline.log` first when they ask about a specific
-   notification (urgency column tells whether "100%" alerts are critical; if not,
-   a group rule or an urgency-free "priority" rule is the next step).
-2. On "go": commit the whole batch after asking about the two binaries above.
-3. No open xreview obligations. Any further change touching >1 file needs
-   `~/.local/bin/xreview.sh "<title>"` + triage in `tasks/reviews.md`.
-4. Optional, only if asked: centre sysmonitor's inline panel icons (they sit ~3px
-   above the text line, same inline-<img> cause); per-section "clear" links.
+0. (2026-09-25) b66a2fc, the amended 2026-09-19 batch, is pushed; main is level with origin/main.
+   The 2026-09-13 rounds stand: the user said "move forward with these all".
+1. Sysmonitor icon centring and the notify per-section "clear" are done, verified live
+   and xreviewed (tasks/completed.md 2026-09-24 section; reviews.md 2026-09-25 00:23),
+   committed and pushed 2026-09-25 on the user's "go". Nothing open.
+2. Parked, not planned: the six `ponytail:` markers show no symptoms; act only if one bites.
 
 ## STATE
-- Branch `main`, HEAD 6f62e6a (batch committed 2026-09-19, not pushed). Working tree clean except the empty root `todo.md` inbox (untracked on purpose).
-- Uncommitted (mixed staged/unstaged/intent-to-add; one batch on "go"):
-  `org.jesuscdev.notify/**` (new), `org.jesuscdev.bluetooth/**` (new),
-  `org.jesuscdev.sysmonitor/contents/{config/main.xml,scripts/fetch-usage.sh,ui/configMetrics.qml,ui/main.qml}`,
-  `org.jesuscdev.transfers/contents/ui/main.qml`, `assets/masters/icon-bell.prompt.txt`,
-  `tasks/{todo,completed,reviews,lessons,handoff}.md`.
-  Untracked: `org.jesuscdev.sysmonitor/contents/icons/fable-mascot.png` (ask first).
-  Must NOT be committed: `assets/masters/*.png` (gitignored), any credentials
-  (none in tree; `fetch-usage.sh` reads them at runtime only).
+- Branch `main`, HEAD = origin/main after the 2026-09-25 commit (icon centring + section clear).
+  Working tree clean except the untracked root `todo.md` inbox (empty, on purpose).
+  Must NOT be committed: `assets/masters/*.png` (gitignored), any credentials.
+- 2026-09-25 scratch (session eda6e086…/scratchpad): `sysmon-valign/` (PySide6 panel
+  replica `harness.py`, live `measure.py`), `notify-p2/` (popup crops), `fswatch/probe.sh`
+  (prints full|normal|none for KWin's active window).
 - No background work. plasmashell live with the current tree.
 - Scratch dir (session-specific, may be gone):
   `/tmp/claude-1000/-home-jesuscdev-Programming-fedora-wayland-sys-monitor-widgets/62e10e0b-bf24-4a15-a731-ae0ba78cb9a8/scratchpad`

@@ -1514,7 +1514,7 @@ PlasmoidItem {
 
     function codexIconHtml() {
         var f = (codexAttention && warnBlink) ? "codex-mascot-warn.png" : "codex-mascot.png"
-        return '<img src="' + Qt.resolvedUrl("../icons/" + f) + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '"> '
+        return '<img src="' + Qt.resolvedUrl("../icons/" + f) + '" width="' + root.panelIconPx + '" height="' + root.panelIconPx + '" align="middle"> '
     }
 
     property bool checking: false
@@ -1633,7 +1633,7 @@ PlasmoidItem {
             var asp = metricIconAspect[seg] || 1
             var h = asp > 1 ? Math.round(root.panelIconPx * Math.sqrt(1.2 / asp)) : root.panelIconPx
             var w = Math.round(h * asp)
-            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + warn + ".png") + '" width="' + w + '" height="' + h + '">&nbsp;'
+            return '<img src="' + Qt.resolvedUrl("../icons/metric-" + seg + warn + ".png") + '" width="' + w + '" height="' + h + '" align="middle">&nbsp;'
         }
         if (useIcons && faFont.status === FontLoader.Ready)
             return faIcon(iconUnicode, color)

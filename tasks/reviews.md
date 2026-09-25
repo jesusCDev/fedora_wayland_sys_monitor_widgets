@@ -176,3 +176,7 @@ reviewer: gpt-5.6-sol · 24 files changed, 2300 insertions(+), 488 deletions(-)
 reviewer: gpt-5.6-terra · 24 files changed, 2514 insertions(+), 489 deletions(-)
 - [x] org.jesuscdev.notify/contents/ui/main.qml:140 — log paths derived from `$XDG_STATE_HOME`/`$HOME` are expanded unquoted, so state directories containing spaces cause logging and rotation to fail — assign the directory in shell and quote every `"$d"`/`"$lp"` path use
   Fixed: dir and file are shell variables now, double-quoted at every use (mkdir, lock, append, wc, tail, mv). Tested the exact command shape with XDG_STATE_HOME set to a directory containing spaces: dir 700, file 600, line written with quotes intact; live reload logged a notification containing quotes and an ampersand.
+
+## 2026-09-25 00:23 — Sysmonitor icon centring + Notify per-section clear
+reviewer: gpt-6-luna · 3 files changed, 48 insertions(+), 17 deletions(-)
+- [x] no findings

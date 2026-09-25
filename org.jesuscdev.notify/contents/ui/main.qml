@@ -240,6 +240,17 @@ PlasmoidItem {
     function clearAll() {
         for (var i = hist.count - 1; i >= 0; i--) hist.close(hist.index(i, 0))
     }
+    // One section, folded twins included: sectionOf() sees every row, head or not.
+    // Pin the targets as persistent indexes first, then close, so a removal
+    // mid-loop cannot shift what is left.
+    function clearSection(sec) {
+        var targets = []
+        for (var i = 0; i < hist.count; i++) {
+            var ix = hist.index(i, 0)
+            if (sectionOf(ix) === sec) targets.push(hist.makePersistentModelIndex(ix))
+        }
+        targets.forEach(function(p) { hist.close(p) })
+    }
 
     // Drawn ×: a text glyph read as a letter. 20px hit box, hover ring.
     component CloseButton: Item {
@@ -257,6 +268,23 @@ PlasmoidItem {
             id: xMa
             anchors.fill: parent
             anchors.margins: -5
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: parent.clicked()
+        }
+    }
+
+    // Text link: footer "clear all" and section "clear". 6px of click slop around the text.
+    component TextButton: Text {
+        signal clicked()
+        font.pointSize: 9.5
+        color: tbMa.containsMouse ? root.colorAccent : root.colorDim
+        Accessible.role: Accessible.Button
+        Accessible.onPressAction: clicked()
+        MouseArea {
+            id: tbMa
+            anchors.fill: parent
+            anchors.margins: -6
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: parent.clicked()
@@ -441,6 +469,14 @@ PlasmoidItem {
                                 text: modelData.title + (root.secUnread[section.sec] > 0 ? " · " + root.secUnread[section.sec] + " unread" : "")
                             }
                             Rectangle { Layout.fillWidth: true; height: 1; color: "#22FFFFFF" }
+                            // Only with 2+ sections showing; with one, footer "clear all" is the same thing.
+                            TextButton {
+                                visible: root.secCount.filter(function(n) { return n > 0 }).length > 1
+                                Layout.rightMargin: 14   // ink ends on the × glyphs' ink: rows' 8px padding + × drawn ~6px inside its box (measured)
+                                text: "clear"
+                                Accessible.name: "Clear " + modelData.title + " notifications"
+                                onClicked: root.clearSection(section.sec)
+                            }
                         }
 
                         Repeater {
@@ -688,20 +724,7 @@ PlasmoidItem {
                         + (root.unread > 0 ? " · " + root.unread + " unread" : "")
                 }
                 Item { Layout.fillWidth: true }
-                Text {
-                    visible: hist.count > 0
-                    font.pointSize: 9.5
-                    color: clearMa.containsMouse ? root.colorAccent : root.colorDim
-                    text: "clear all"
-                    MouseArea {
-                        id: clearMa
-                        anchors.fill: parent
-                        anchors.margins: -6
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.clearAll()
-                    }
-                }
+                TextButton { visible: hist.count > 0; text: "clear all"; onClicked: root.clearAll() }
             }
         }
     }
